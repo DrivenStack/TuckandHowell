@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+*.swp
+
+# local AI agent settings
+.claude/settings.local.json
+
+# profiling and test caches
+*.cpuprofile
+*.heapprofile
+.vitest/

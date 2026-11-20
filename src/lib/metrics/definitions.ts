@@ -1,0 +1,319 @@
+/**
+ * Every metric shown in the app. Names are written the way the owner would say them.
+ * Components look metrics up here so name, explanation and source are identical everywhere.
+ */
+export type MetricSource = "ServiceTitan" | "Dialpad" | "ServiceTitan and Dialpad" | "GoHighLevel and ServiceTitan";
+
+export type MetricFormat = "count" | "percent" | "currency" | "minutes" | "duration";
+
+export interface MetricDefinition {
+  id: MetricId;
+  name: string;
+  explanation: string;
+  formula: string;
+  source: MetricSource;
+  format: MetricFormat;
+  /** Whether a higher value is good. Drives the better / worse color. */
+  higherIsBetter: boolean;
+  group: "Calls" | "Callbacks" | "Bookings" | "Revenue" | "Team" | "AI Voice Agent" | "Leads" | "Marketing";
+}
+
+export const METRIC_IDS = [
+  "calls_in",
+  "answered_by_csr",
+  "answered_by_ai",
+  "missed_calls",
+  "jobs_booked",
+  "booking_rate",
+  "callback_booking_rate",
+  "time_to_callback",
+  "people_waiting",
+  "oldest_wait",
+  "unreturned_calls",
+  "unreturned_rate",
+  "revenue",
+  "callbacks_completed",
+  "talk_time",
+  "calls_handled",
+  "missed_while_available",
+  "time_on_break",
+  "ai_calls",
+  "ai_booked",
+  "ai_needs_callback",
+  "ai_returned",
+  "ai_never_returned",
+  "new_leads",
+  "leads_booked",
+  "lead_value",
+  "lead_conversion",
+  "legacy_share",
+] as const;
+
+export type MetricId = (typeof METRIC_IDS)[number];
+
+const defs: Omit<MetricDefinition, "id">[] = [
+  {
+    name: "Calls in",
+    explanation: "Every customer call that came in, not counting calls between staff.",
+    formula: "Count of inbound customer calls",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Calls",
+  },
+  {
+    name: "Answered by CSRs",
+    explanation: "Calls a person on the team picked up and talked to the customer.",
+    formula: "Inbound calls answered by a CSR",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Calls",
+  },
+  {
+    name: "Answered by AI Voice Agent",
+    explanation: "Calls the AI Voice Agent picked up because no CSR was free, or after hours.",
+    formula: "Inbound calls handled by the AI Voice Agent",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "Calls",
+  },
+  {
+    name: "Missed calls",
+    explanation: "Calls nobody picked up, including callers who hung up while waiting.",
+    formula: "Missed calls + abandoned calls",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "Calls",
+  },
+  {
+    name: "Jobs booked",
+    explanation: "Jobs put on the schedule, from any call, callback, web form or lead.",
+    formula: "Count of jobs booked in the period",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Bookings",
+  },
+  {
+    name: "Booking rate",
+    explanation: "Out of the calls our CSRs answered, how many ended with a job on the schedule.",
+    formula: "Booked calls ÷ calls answered by CSRs",
+    source: "ServiceTitan",
+    format: "percent",
+    higherIsBetter: true,
+    group: "Bookings",
+  },
+  {
+    name: "Callback booking rate",
+    explanation: "Out of the people we reached on a callback, how many booked a job.",
+    formula: "Callbacks that ended Booked ÷ callbacks where we reached the customer",
+    source: "ServiceTitan",
+    format: "percent",
+    higherIsBetter: true,
+    group: "Callbacks",
+  },
+  {
+    name: "Time to call back",
+    explanation: "How long a customer typically waits between their missed call and our first call back, counted from when we open (7 am to 7 pm). Half of customers wait less than this.",
+    formula: "Median of (first callback attempt − first missed call during open hours)",
+    source: "ServiceTitan",
+    format: "minutes",
+    higherIsBetter: false,
+    group: "Callbacks",
+  },
+  {
+    name: "People waiting for a callback",
+    explanation: "Customers who called, did not get help, and nobody has reached yet.",
+    formula: "Items in Needs callback right now",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "Callbacks",
+  },
+  {
+    name: "Longest wait",
+    explanation: "How long the customer who has waited the longest has been waiting.",
+    formula: "Now − oldest first missed call in Needs callback",
+    source: "ServiceTitan",
+    format: "minutes",
+    higherIsBetter: false,
+    group: "Callbacks",
+  },
+  {
+    name: "Unreturned calls",
+    explanation: "Customers who needed a callback and nobody tried to reach within 24 hours. After a day, most have hired someone else.",
+    formula: "Callback items with no attempt or contact within 24 hours",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "Revenue",
+  },
+  {
+    name: "Unreturned rate",
+    explanation: "Out of everyone who needed a callback, the share nobody tried to reach within 24 hours.",
+    formula: "Unreturned calls ÷ all callback items",
+    source: "ServiceTitan",
+    format: "percent",
+    higherIsBetter: false,
+    group: "Revenue",
+  },
+  {
+    name: "Revenue",
+    explanation: "Value of jobs booked from these calls, using the invoice once the job is done.",
+    formula: "Sum of job invoices (or estimates for jobs not yet done)",
+    source: "ServiceTitan",
+    format: "currency",
+    higherIsBetter: true,
+    group: "Revenue",
+  },
+  {
+    name: "Callbacks completed",
+    explanation: "Callbacks where this person reached the customer or booked the job.",
+    formula: "Callback items moved to Called back or Booked by the CSR",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Team",
+  },
+  {
+    name: "Talk time",
+    explanation: "Total time spent on the phone with customers.",
+    formula: "Sum of call durations, inbound and outbound",
+    source: "ServiceTitan",
+    format: "duration",
+    higherIsBetter: true,
+    group: "Team",
+  },
+  {
+    name: "Calls handled",
+    explanation: "Customer calls this person answered plus calls they made.",
+    formula: "Inbound calls answered + outbound calls made",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Team",
+  },
+  {
+    name: "Missed while available",
+    explanation: "Calls that rang this person while their status said Available and were not picked up.",
+    formula: "Missed calls routed to the CSR during Available status",
+    source: "ServiceTitan and Dialpad",
+    format: "count",
+    higherIsBetter: false,
+    group: "Team",
+  },
+  {
+    name: "Time on break",
+    explanation: "Time in Break or Lunch status during the shift.",
+    formula: "Sum of Break and Lunch status time",
+    source: "Dialpad",
+    format: "duration",
+    higherIsBetter: false,
+    group: "Team",
+  },
+  {
+    name: "AI Voice Agent calls",
+    explanation: "Calls the AI Voice Agent took.",
+    formula: "Inbound calls handled by the AI Voice Agent",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "AI Voice Agent",
+  },
+  {
+    name: "Booked by the AI Voice Agent",
+    explanation: "AI Voice Agent calls where the caller booked a job without a person.",
+    formula: "AI Voice Agent calls with a booking",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "AI Voice Agent",
+  },
+  {
+    name: "AI calls still waiting",
+    explanation: "AI Voice Agent callers who did not book and are still waiting for a person to call.",
+    formula: "AI Voice Agent callback items in Needs callback or Attempted",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: false,
+    group: "AI Voice Agent",
+  },
+  {
+    name: "AI calls returned by a CSR",
+    explanation: "AI Voice Agent callers a CSR called back or reached.",
+    formula: "AI Voice Agent callback items with at least one CSR attempt or contact",
+    source: "ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "AI Voice Agent",
+  },
+  {
+    name: "AI calls never returned",
+    explanation: "Out of AI Voice Agent callers who did not book, the share no CSR tried to call within 24 hours.",
+    formula: "AI callback items with no attempt within 24 hours ÷ all AI callback items",
+    source: "ServiceTitan",
+    format: "percent",
+    higherIsBetter: false,
+    group: "AI Voice Agent",
+  },
+  {
+    name: "New leads",
+    explanation: "New chances to win work: first calls, web forms and Angi requests. Repeat contacts within 3 days count once.",
+    formula: "First contact per customer within 3 days, from any source",
+    source: "GoHighLevel and ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Leads",
+  },
+  {
+    name: "Leads booked",
+    explanation: "Leads that turned into a job on the schedule within 14 days.",
+    formula: "Leads with a job booked within 14 days",
+    source: "GoHighLevel and ServiceTitan",
+    format: "count",
+    higherIsBetter: true,
+    group: "Leads",
+  },
+  {
+    name: "Value of booked leads",
+    explanation: "What the booked jobs from these leads are worth, using the invoice once the job is done.",
+    formula: "Sum of job values for booked leads",
+    source: "ServiceTitan",
+    format: "currency",
+    higherIsBetter: true,
+    group: "Leads",
+  },
+  {
+    name: "Lead conversion",
+    explanation: "Out of new leads, how many became a booked job.",
+    formula: "Leads that reached Booked or later ÷ all leads",
+    source: "GoHighLevel and ServiceTitan",
+    format: "percent",
+    higherIsBetter: true,
+    group: "Leads",
+  },
+  {
+    name: "Untracked calls",
+    explanation: "Share of calls that came in on the old main number, so we cannot tell which marketing brought them in.",
+    formula: "Calls on Legacy Number: Main Line ÷ all calls",
+    source: "ServiceTitan",
+    format: "percent",
+    higherIsBetter: false,
+    group: "Marketing",
+  },
+];
+
+export const METRICS: Record<MetricId, MetricDefinition> = Object.fromEntries(
+  METRIC_IDS.map((id, i) => [id, { id, ...defs[i] }]),
+) as Record<MetricId, MetricDefinition>;
+
+export const metric = (id: MetricId) => METRICS[id];
+
+/** Default target the booking rate is compared against */
+export const BOOKING_RATE_TARGET = 0.6;
+
+export const SOURCE_OF_TRUTH_NOTE =
+  "Dialpad counts internal calls between staff and ServiceTitan does not, so call counts use ServiceTitan as the source of truth. Availability and breaks use Dialpad.";

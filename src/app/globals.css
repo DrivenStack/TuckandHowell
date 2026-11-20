@@ -1,0 +1,195 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens. See DESIGN.md. */
+:root {
+  --ink: #13232e;
+  --ground: #f3f5f4;
+  --panel: #ffffff;
+  --cool: #2c6e9b;
+  --warm: #d9822b;
+  --alarm: #b9443c;
+
+  --muted-text: #56656f;
+  --line: #dce2e0;
+  --line-strong: #c5cecb;
+  --warm-text: #9a5712;
+  --success: #2f7d5b;
+  --ai: #8fb4cf;
+  --subtle: #e9edeb;
+  --rail: #13232e;
+  --rail-text: #c9d4d9;
+  --rail-active: #ffffff;
+  --on-ink: #ffffff;
+
+  --cool-tint: color-mix(in oklab, var(--cool) 11%, transparent);
+  --warm-tint: color-mix(in oklab, var(--warm) 14%, transparent);
+  --alarm-tint: color-mix(in oklab, var(--alarm) 11%, transparent);
+  --success-tint: color-mix(in oklab, var(--success) 12%, transparent);
+
+  /* Chart series, validated for CVD separation (see DESIGN.md) */
+  --series-csr: #1f67a3;
+  --series-ai: #5e9bd0;
+  --series-missed: #b8433a;
+  --chart-grid: #e4e9e7;
+  --chart-axis: #6b7a83;
+
+  --shadow-float: 0 12px 32px -12px rgb(19 35 46 / 0.22), 0 2px 6px -2px rgb(19 35 46 / 0.08);
+  color-scheme: light;
+}
+
+.dark {
+  --ink: #e6ecee;
+  --ground: #0d171e;
+  --panel: #14222b;
+  --cool: #6ca9d6;
+  --warm: #e39a50;
+  --alarm: #e2726a;
+
+  --muted-text: #93a3ac;
+  --line: #243642;
+  --line-strong: #31485a;
+  --warm-text: #e9a866;
+  --success: #5db38a;
+  --ai: #3e6f92;
+  --subtle: #1a2b36;
+  --rail: #0a1319;
+  --rail-text: #93a3ac;
+  --rail-active: #e6ecee;
+  --on-ink: #0d171e;
+
+  --series-csr: #5799d2;
+  --series-ai: #2a6299;
+  --series-missed: #d0625a;
+  --chart-grid: #1e2f3a;
+  --chart-axis: #8797a1;
+
+  --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: var(--ink);
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-cool: var(--cool);
+  --color-warm: var(--warm);
+  --color-alarm: var(--alarm);
+  --color-warm-text: var(--warm-text);
+  --color-success: var(--success);
+  --color-ai: var(--ai);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-subtle: var(--subtle);
+  --color-rail: var(--rail);
+  --color-rail-text: var(--rail-text);
+  --color-rail-active: var(--rail-active);
+  --color-on-ink: var(--on-ink);
+  --color-cool-tint: var(--cool-tint);
+  --color-series-csr: var(--series-csr);
+  --color-series-ai: var(--series-ai);
+  --color-series-missed: var(--series-missed);
+  --color-warm-tint: var(--warm-tint);
+  --color-alarm-tint: var(--alarm-tint);
+  --color-success-tint: var(--success-tint);
+
+  /* shadcn/ui semantic names mapped onto our tokens */
+  --color-background: var(--ground);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--on-ink);
+  --color-secondary: var(--subtle);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--subtle);
+  --color-muted-foreground: var(--muted-text);
+  --color-accent: var(--subtle);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--alarm);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--cool);
+
+  --radius-control: 10px;
+  --radius-panel: 14px;
+  --radius-hero: 22px;
+
+  --shadow-float: var(--shadow-float);
+
+  --text-hero: 4rem;
+  --text-hero--line-height: 1;
+  --text-hero--letter-spacing: -0.03em;
+  --text-figure: 2rem;
+  --text-figure--line-height: 2.25rem;
+  --text-figure--letter-spacing: -0.02em;
+  --text-title: 1.75rem;
+  --text-title--line-height: 2.125rem;
+  --text-title--letter-spacing: -0.015em;
+  --text-section: 1.0625rem;
+  --text-section--line-height: 1.5rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.375rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.125rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.375rem;
+    font-feature-settings: "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--cool);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--cool) 25%, transparent);
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Recharts: keep focus outlines off SVG paths, the tooltip carries focus info */
+.recharts-wrapper *:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
