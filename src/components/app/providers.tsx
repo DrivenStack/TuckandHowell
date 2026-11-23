@@ -5,6 +5,7 @@ import { MotionConfig } from "framer-motion";
 import { nextDelay, simulateTick } from "@/lib/callbacks/simulator";
 import { Rng } from "@/lib/data/mock/rng";
 import { USE_MOCK_DATA } from "@/lib/data";
+import { buildLogIndex, callbackLog } from "@/lib/metrics/callback-log";
 import { THEME_STORAGE_KEY, useAppStore } from "@/store/app";
 import { useDataStore } from "@/store/data";
 import { TooltipProvider } from "@/components/ui/primitives";
@@ -88,8 +89,12 @@ function SimulationRunner() {
         const s = useDataStore.getState();
         if (s.data) {
           const now = Date.now();
+          // Open web forms and Lace flags from the last 3 days, so the simulated CSRs call those back too
+          const extraOpen = callbackLog(s.data, buildLogIndex(s.data), now - 3 * 86_400_000, now)
+            .filter((r) => (r.type === "Web form" || r.type === "Lace flag") && !r.doneByData)
+            .map((r) => ({ customerId: r.customerId, jobType: r.jobType, campaignId: "" }));
           const event = simulateTick(
-            { customers: s.data.customers, csrs: s.data.csrs, callbacks: s.callbacks, goLiveAt: s.data.goLiveAt, now },
+            { customers: s.data.customers, csrs: s.data.csrs, callbacks: s.callbacks, goLiveAt: s.data.goLiveAt, now, extraOpen },
             rng,
           );
           s.applyEvent(event, { notify: false });

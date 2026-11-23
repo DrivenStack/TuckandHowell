@@ -97,6 +97,8 @@ export interface InboundCall extends CallBase {
   aiSummary: string | null;
   /** Flag set when the caller signalled strong buying intent */
   hotLead: boolean;
+  /** Lace AI flagged this answered call for a follow-up (the reason), or undefined */
+  laceFlag?: string | null;
   source: "ServiceTitan";
 }
 

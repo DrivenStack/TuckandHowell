@@ -40,6 +40,11 @@
   --level-3: #c9a227;
   --level-4: #d9822b;
   --level-5: #b9443c;
+  /* Platforms (categorical, validated in this order: blue, magenta, violet, aqua) */
+  --platform-broccoli: #2a78d6;
+  --platform-dialpad: #e87ba4;
+  --platform-servicetitan: #6b5ac9;
+  --platform-lace: #1baf7a;
   --chart-axis: #6b7a83;
 
   --shadow-float: 0 12px 32px -12px rgb(19 35 46 / 0.22), 0 2px 6px -2px rgb(19 35 46 / 0.08);
@@ -75,6 +80,10 @@
   --level-3: #e0c04e;
   --level-4: #e39a50;
   --level-5: #e2726a;
+  --platform-broccoli: #3987e5;
+  --platform-dialpad: #d55181;
+  --platform-servicetitan: #8f6fd8;
+  --platform-lace: #199e70;
   --chart-axis: #8797a1;
 
   --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);

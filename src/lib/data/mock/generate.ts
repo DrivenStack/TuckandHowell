@@ -27,6 +27,7 @@ import {
   CSRS,
   FIRST_NAMES,
   JOB_TYPE_WEIGHTS,
+  LACE_REASONS,
   LAST_NAMES,
   PROFILE_ANSWER_WEIGHT,
   PROFILE_BOOKING,
@@ -348,6 +349,7 @@ export function generateDataset(now: number): Dataset {
       let booked = false;
       let aiSummary: string | null = null;
       let hotLead = false;
+      let laceFlag: string | null = null;
 
       if (outcome === "csr_answered") {
         const csr = rng.weighted(free.map((c) => [c, PROFILE_ANSWER_WEIGHT[c.profile]] as const));
@@ -356,6 +358,8 @@ export function generateDataset(now: number): Dataset {
         busyUntil.set(csr.id, draft.at + durationSec * 1000 + rng.int(30, 120) * 1000);
         const factor = draft.jobType === "Call Back" || draft.jobType === "Warranty" ? 0.75 : 1;
         booked = rng.chance(PROFILE_BOOKING[csr.profile] * factor);
+        // Lace AI reads the transcript and flags some unbooked calls for a follow-up
+        if (!booked && draft.jobType !== "Call Back" && draft.jobType !== "Warranty" && rng.chance(0.22)) laceFlag = rng.pick(LACE_REASONS);
       } else if (outcome === "ai_agent") {
         booked = rng.chance(0.21);
         durationSec = aiCallSeconds(rng, booked);
@@ -398,6 +402,7 @@ export function generateDataset(now: number): Dataset {
         jobId: null,
         aiSummary,
         hotLead,
+        laceFlag,
         source: "ServiceTitan",
       };
       if (booked) {
@@ -445,7 +450,7 @@ export function generateDataset(now: number): Dataset {
     }
     let outSeq = 0;
     for (const c of dayInbound) {
-      const isTrigger = c.outcome === "missed" || c.outcome === "abandoned" || (c.outcome === "ai_agent" && !c.booked);
+      const isTrigger = c.outcome === "missed" || c.outcome === "abandoned" || (c.outcome === "ai_agent" && !c.booked) || !!c.laceFlag;
       if (!isTrigger) continue;
       const key = c.customerId;
       // Already covered by a follow-up planned after this call (grouped into the same item)

@@ -5,11 +5,11 @@
  *
  * Pure: takes state + a random source, returns new raw events. The runner decides when to tick.
  */
-import { AI_ISSUES, AI_NO_BOOK_REASONS, CAMPAIGNS, JOB_TYPE_WEIGHTS } from "@/lib/data/mock/fixtures";
+import { AI_ISSUES, AI_NO_BOOK_REASONS, CAMPAIGNS, JOB_TYPE_WEIGHTS, LACE_REASONS } from "@/lib/data/mock/fixtures";
 import { aiCallSeconds, hangUpSeconds, jobAmount } from "@/lib/data/mock/generate";
 import { Rng } from "@/lib/data/mock/rng";
 import { HOUR, nyAddDays, nyStartOfDay } from "@/lib/time";
-import type { Call, Callback, CallbackAction, Csr, Customer, InboundCall, Job, OutboundCall, TextMessage } from "@/lib/types";
+import type { Call, Callback, CallbackAction, Csr, Customer, InboundCall, Job, JobType, OutboundCall, TextMessage } from "@/lib/types";
 import { sortByPriority } from "./engine";
 
 export interface SimState {
@@ -18,10 +18,12 @@ export interface SimState {
   callbacks: Callback[];
   goLiveAt: number;
   now: number;
+  /** Open call backs that are not phone misses (web forms, Lace flags), so CSRs call those back too */
+  extraOpen?: { customerId: string; jobType: JobType; campaignId: string }[];
 }
 
 export interface SimEvent {
-  kind: "missed" | "ai_no_booking" | "outbound" | "called_in" | "booking" | "claim";
+  kind: "missed" | "ai_no_booking" | "outbound" | "called_in" | "booking" | "claim" | "lace_flag" | "follow_up";
   calls: Call[];
   jobs: Job[];
   texts: TextMessage[];
@@ -57,6 +59,8 @@ export function simulateTick(state: SimState, rng: Rng): SimEvent {
     ["called_in", open.length ? 9 : 0],
     ["booking", recentCalledBack.length || open.length ? 10 : 0],
     ["claim", needs.some((n) => !n.claim) ? 8 : 0],
+    ["lace_flag", 7],
+    ["follow_up", state.extraOpen?.length ? 9 : 0],
   ] as const);
 
   switch (kind) {
@@ -71,6 +75,10 @@ export function simulateTick(state: SimState, rng: Rng): SimEvent {
       const target = recentCalledBack.length && rng.chance(0.7) ? rng.pick(recentCalledBack) : rng.pick(open.length ? open : recentCalledBack);
       return booking(state, rng, target);
     }
+    case "lace_flag":
+      return laceFlag(state, rng);
+    case "follow_up":
+      return followUp(state, rng, rng.pick(state.extraOpen!));
     case "claim": {
       const target = needs.find((n) => !n.claim);
       const e = emptyEvent("claim");
@@ -212,5 +220,54 @@ function booking(state: SimState, rng: Rng, target: Callback): SimEvent {
     }
   }
   e.jobs.push(makeBookedJob(rng, target, csrId, state.now));
+  return e;
+}
+
+/** A CSR answered, the caller did not book, and Lace AI flagged it for a follow-up. */
+function laceFlag(state: SimState, rng: Rng): SimEvent {
+  const { now } = state;
+  const customer = rng.pick(state.customers);
+  const e = emptyEvent("lace_flag");
+  const durationSec = rng.int(120, 420);
+  e.calls.push({
+    id: uid("call", now),
+    direction: "inbound",
+    customerId: customer.id,
+    phone: customer.phones[0],
+    startedAt: now - durationSec * 1000,
+    durationSec,
+    jobType: rng.weighted(JOB_TYPE_WEIGHTS),
+    outcome: "csr_answered",
+    campaignId: rng.weighted(CAMPAIGNS.map((c) => [c.id, c.weight] as const)),
+    csrId: rng.pick(state.csrs).id,
+    booked: false,
+    jobId: null,
+    aiSummary: null,
+    hotLead: false,
+    laceFlag: rng.pick(LACE_REASONS),
+    source: "ServiceTitan",
+  });
+  return e;
+}
+
+/** A CSR calls back a web form or Lace flag request. */
+function followUp(state: SimState, rng: Rng, target: { customerId: string; jobType: JobType }): SimEvent {
+  const { now } = state;
+  const customer = state.customers.find((c) => c.id === target.customerId);
+  const e = emptyEvent("follow_up");
+  if (!customer) return e;
+  const answered = rng.chance(0.62);
+  e.calls.push({
+    id: uid("out", now),
+    direction: "outbound",
+    customerId: customer.id,
+    phone: customer.phones[0],
+    startedAt: now,
+    durationSec: answered ? rng.int(60, 300) : 0,
+    jobType: target.jobType,
+    outcome: answered ? "answered" : "no_answer",
+    csrId: rng.pick(state.csrs).id,
+    source: "ServiceTitan",
+  });
   return e;
 }

@@ -160,3 +160,13 @@ export const ANGI_MESSAGES = [
   "Angi request: drain cleaning, flexible timeline.",
   "Angi request: furnace not heating, ASAP.",
 ];
+
+/** Why Lace AI flagged an answered call that did not book for a follow-up */
+export const LACE_REASONS = [
+  "Customer asked for a quote by phone",
+  "Customer wanted to check with their spouse",
+  "Customer asked us to call back after work",
+  "Price objection, open to a second option",
+  "Asked about financing for a new system",
+  "Wanted an earlier appointment than offered",
+];

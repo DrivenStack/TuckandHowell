@@ -2,8 +2,19 @@
 
 A mobile-first web app for Tuck & Howell's call center. It has two tabs:
 
-- **Stats:** pick Abandoned (hung up on hold) or Broccoli (the AI Voice Agent took the call and the caller did not book). Four summary numbers, then a donut chart by callback speed or by call length. Click a slice to see its share, bookings, trend and the calls in it.
-- **Callbacks:** a live table of every call that needed a call back, from every source (Abandoned, Broccoli, Missed). Open calls stay on top; when someone calls the customer back, the row turns done and moves down.
+- **Stats:** every call back we owe, in one donut chart by platform (Broccoli, Dialpad, ServiceTitan, Lace). Click a slice to see that platform's share, how fast we called back, bookings, trend and the calls in it.
+- **Callbacks:** a live table of every call back, from every platform. Open calls stay on top; when someone calls the customer back, the row turns done and moves down.
+
+### Where call backs come from
+
+Set in one place, `PLATFORM_OF` in `src/lib/metrics/callback-log.ts`:
+
+| Platform | Call backs |
+|---|---|
+| Dialpad | Abandoned (hung up on hold) and Missed (rang a CSR, nobody answered) |
+| Broccoli | AI Voice Agent calls where the caller did not book |
+| ServiceTitan | Web form requests |
+| Lace | Answered calls that did not book, flagged by Lace AI for a follow-up |
 
 All data is **seeded dummy data** for now. It is generated in the browser, is identical on every reload, and is labeled with the system it will come from (ServiceTitan, Dialpad, AI Voice Agent, GoHighLevel).
 
@@ -39,7 +50,7 @@ src/
     common/               Page header, date range picker, change indicator, sortable paged table (TanStack), empty states
     ui/                   shadcn/ui primitives (Radix), styled to DESIGN.md
     views/
-      stats.tsx                The Stats tab: type switch, summary, donut, slice details
+      stats.tsx                The Stats tab: summary, platform donut, platform details
       callbacks.tsx            The Callbacks table
   lib/
     types/                Domain types (Call, Customer, Callback, Lead, Csr, Job, ...)
@@ -48,8 +59,8 @@ src/
       mock/               Seeded generator (mulberry32) and mock adapters implementing those interfaces
       index.ts            USE_MOCK_DATA switch and loadDataset()
     metrics/
-      abandoned.ts        Follow-up metrics for Stats: called back, still open, callback speed and call length groups
-      callback-log.ts     The Callbacks table rows: assigned CSR, attempts, reached CSR, action needed, done
+      abandoned.ts        Shared helpers: callback speed groups, time bins for the line graphs
+      callback-log.ts     Every call back, by type and platform: assigned CSR, attempts, reached CSR, speed, done
       definitions.ts      Every metric: name, plain explanation, formula, source of truth
       calculations.ts     Pure metric functions
     callbacks/
@@ -77,8 +88,8 @@ All in `src/lib/metrics/abandoned.ts`, tested in `abandoned.test.ts`:
 
 Built in `src/lib/metrics/callback-log.ts`, tested in `callback-log.test.ts`. One row per call that needed a call back:
 
-- **Type:** Abandoned (hung up on hold), Broccoli (AI Voice Agent, no booking), or Missed (rang a CSR, nobody answered).
-- **Assigned to:** the CSR whose line rang and did not pick up. Calls that came in when nobody was on shift show After hours.
+- **Type:** Abandoned (hung up on hold), Missed (rang a CSR, nobody answered), Broccoli (AI Voice Agent, no booking), Web form, or Lace flag (answered, no booking, flagged by Lace AI). Hover a type to see the reason.
+- **Assigned to:** the CSR whose line rang and did not pick up (for Lace flags, the CSR who took the call). Calls that came in when nobody was on shift show After hours; web forms show Unassigned.
 - **Length (sec):** how long the original call lasted.
 - **Attempt:** our outbound calls to any of the customer's numbers within 3 days, up to the one that reached them.
 - **Reached CSR?:** Yes when one of those calls lasted 20 seconds or more, or the customer called again and a CSR answered.

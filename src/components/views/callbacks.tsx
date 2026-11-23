@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Bot, Check, ListChecks, Minus, PhoneMissed, PhoneOff, Search, type LucideIcon } from "lucide-react";
+import { Bot, Check, FileText, ListChecks, Minus, PhoneMissed, PhoneOff, Search, Sparkles, type LucideIcon } from "lucide-react";
 import { buildLogIndex, callbackLog, CALLBACK_TYPES, REACHED_MIN_SECONDS, type ActionNeeded, type CallbackRow, type CallbackType } from "@/lib/metrics/callback-log";
 import { fmtInt, type RangePreset } from "@/lib/metrics/calculations";
 import { fmt, fmtTime } from "@/lib/time";
@@ -18,6 +18,8 @@ const TYPE_META: Record<CallbackType, { icon: LucideIcon; hint: string }> = {
   Abandoned: { icon: PhoneOff, hint: "Hung up while waiting on hold" },
   Broccoli: { icon: Bot, hint: "AI Voice Agent took the call, no booking" },
   Missed: { icon: PhoneMissed, hint: "Rang a CSR, nobody picked up" },
+  "Web form": { icon: FileText, hint: "Web form request from ServiceTitan" },
+  "Lace flag": { icon: Sparkles, hint: "Answered call that did not book, flagged by Lace AI" },
 };
 
 const ACTION_STYLE: Record<ActionNeeded, string> = {
@@ -110,7 +112,7 @@ function Callbacks() {
       cell: (r) => {
         const m = TYPE_META[r.type];
         return (
-          <span title={m.hint} className="inline-flex h-6 items-center gap-1 rounded-full bg-subtle px-2 text-caption font-medium whitespace-nowrap">
+          <span title={r.note ? `${m.hint}: ${r.note}` : m.hint} className="inline-flex h-6 items-center gap-1 rounded-full bg-subtle px-2 text-caption font-medium whitespace-nowrap">
             <m.icon className="size-3.5 text-muted-foreground" aria-hidden />
             {r.type}
           </span>
@@ -127,12 +129,12 @@ function Callbacks() {
         r.assignedCsrId ? (
           <span className="whitespace-nowrap">{csrNames.get(r.assignedCsrId) ?? "CSR"}</span>
         ) : (
-          <span className="whitespace-nowrap text-muted-foreground" title="Came in when no CSR was on shift">
-            After hours
+          <span className="whitespace-nowrap text-muted-foreground" title={r.type === "Web form" ? "Web forms are not tied to a CSR" : "Came in when no CSR was on shift"}>
+            {r.type === "Web form" ? "Unassigned" : "After hours"}
           </span>
         ),
     },
-    { id: "length", header: "Length (sec)", align: "right", value: (r) => r.lengthSec, cell: (r) => fmtInt(r.lengthSec) },
+    { id: "length", header: "Length (sec)", align: "right", value: (r) => r.lengthSec, cell: (r) => (r.lengthSec === null ? <span className="text-muted-foreground">–</span> : fmtInt(r.lengthSec)) },
     { id: "attempts", header: "Attempt", align: "right", value: (r) => r.attempts, cell: (r) => fmtInt(r.attempts) },
     {
       id: "reached",
@@ -291,7 +293,8 @@ function Callbacks() {
       />
 
       <p className="mt-4 text-caption text-muted-foreground">
-        Assigned to is the CSR whose line rang and did not pick up; calls that came in when nobody was on shift show After hours. A call back to any of the
+        Assigned to is the CSR whose line rang and did not pick up (for Lace flags, the CSR who took the call); calls that came in when nobody was on shift show After
+        hours, and web forms show Unassigned. Hover a type to see why it needs a call back. A call back to any of the
         customer&apos;s numbers marks the row done and moves it below the open ones. Attempt counts our call backs within 3 days. Reached CSR means a call of{" "}
         {REACHED_MIN_SECONDS} seconds or more, or the customer called again and a CSR answered.
       </p>
