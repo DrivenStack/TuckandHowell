@@ -5,51 +5,48 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { RangePreset } from "@/lib/metrics/calculations";
 import { DEFAULT_CALLBACK_SETTINGS, type CallbackSettings } from "@/lib/types";
 
-export type Role = "owner" | "manager" | "csr";
 export type ThemeChoice = "light" | "dark" | "system";
 
 export const THEME_STORAGE_KEY = "th-theme";
 
 interface AppState {
-  role: Role;
-  /** Which CSR the demo is acting as when role is "csr" (and who acts for owner/manager actions) */
-  csrId: string;
   theme: ThemeChoice;
   settings: CallbackSettings;
   simulationOn: boolean;
   rangePreset: RangePreset;
   customRange: { from: number; to: number } | null;
+  /** Manual "Done?" ticks on the Callbacks tab, keyed by call id. Overrides what the data says. */
+  doneOverrides: Record<string, boolean>;
 
-  setRole: (role: Role, csrId?: string) => void;
   setTheme: (theme: ThemeChoice) => void;
   updateSettings: (patch: Partial<CallbackSettings>) => void;
   resetSettings: () => void;
   setSimulation: (on: boolean) => void;
   setRange: (preset: RangePreset, custom?: { from: number; to: number }) => void;
+  setDone: (callId: string, done: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      role: "owner",
-      csrId: "csr_marcus",
       theme: "system",
       settings: DEFAULT_CALLBACK_SETTINGS,
       simulationOn: true,
       rangePreset: "today",
       customRange: null,
+      doneOverrides: {},
 
-      setRole: (role, csrId) => set((s) => ({ role, csrId: csrId ?? s.csrId })),
       setTheme: (theme) => set({ theme }),
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_CALLBACK_SETTINGS }),
       setSimulation: (simulationOn) => set({ simulationOn }),
       setRange: (rangePreset, custom) => set({ rangePreset, customRange: custom ?? null }),
+      setDone: (callId, done) => set((s) => ({ doneOverrides: { ...s.doneOverrides, [callId]: done } })),
     }),
     {
       name: "th-call-center",
-      version: 2,
-      // Drop fields from older saved versions (alert rules were removed)
+      version: 3,
+      // Older saved versions had roles and alert rules; extra fields are ignored
       migrate: (persisted) => persisted as AppState,
       storage: createJSONStorage(() => {
         try {
@@ -64,18 +61,11 @@ export const useAppStore = create<AppState>()(
       // Rehydrated after mount (see AppProviders) so server and first client render match.
       skipHydration: true,
       partialize: (s) => ({
-        role: s.role,
-        csrId: s.csrId,
         theme: s.theme,
         settings: s.settings,
         simulationOn: s.simulationOn,
+        doneOverrides: s.doneOverrides,
       }),
     },
   ),
 );
-
-/** Pages a CSR may open */
-export function canView(role: Role, path: string): boolean {
-  if (role !== "csr") return true;
-  return path.startsWith("/callbacks") || path.startsWith("/team/");
-}

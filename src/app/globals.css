@@ -34,6 +34,12 @@
   --series-ai: #5e9bd0;
   --series-missed: #b8433a;
   --chart-grid: #e4e9e7;
+  /* Five-step scale from best (green) to worst (red), for speed and hang-up length */
+  --level-1: #2f7d5b;
+  --level-2: #6f9a2e;
+  --level-3: #c9a227;
+  --level-4: #d9822b;
+  --level-5: #b9443c;
   --chart-axis: #6b7a83;
 
   --shadow-float: 0 12px 32px -12px rgb(19 35 46 / 0.22), 0 2px 6px -2px rgb(19 35 46 / 0.08);
@@ -64,6 +70,11 @@
   --series-ai: #2a6299;
   --series-missed: #d0625a;
   --chart-grid: #1e2f3a;
+  --level-1: #5db38a;
+  --level-2: #9cc15a;
+  --level-3: #e0c04e;
+  --level-4: #e39a50;
+  --level-5: #e2726a;
   --chart-axis: #8797a1;
 
   --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
@@ -91,6 +102,11 @@
   --color-on-ink: var(--on-ink);
   --color-cool-tint: var(--cool-tint);
   --color-series-csr: var(--series-csr);
+  --color-level-1: var(--level-1);
+  --color-level-2: var(--level-2);
+  --color-level-3: var(--level-3);
+  --color-level-4: var(--level-4);
+  --color-level-5: var(--level-5);
   --color-series-ai: var(--series-ai);
   --color-series-missed: var(--series-missed);
   --color-warm-tint: var(--warm-tint);

@@ -42,7 +42,7 @@ export const gridProps = {
 export function ChartBox({ height = 240, children, className, label }: { height?: number; children: ReactNode; className?: string; label: string }) {
   return (
     <div role="img" aria-label={label} className={cn("w-full select-none", className)} style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 200, height: 40 }}>
         {children as React.ReactElement}
       </ResponsiveContainer>
     </div>

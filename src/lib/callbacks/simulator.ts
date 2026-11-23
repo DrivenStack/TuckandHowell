@@ -6,7 +6,7 @@
  * Pure: takes state + a random source, returns new raw events. The runner decides when to tick.
  */
 import { AI_ISSUES, AI_NO_BOOK_REASONS, CAMPAIGNS, JOB_TYPE_WEIGHTS } from "@/lib/data/mock/fixtures";
-import { jobAmount } from "@/lib/data/mock/generate";
+import { aiCallSeconds, hangUpSeconds, jobAmount } from "@/lib/data/mock/generate";
 import { Rng } from "@/lib/data/mock/rng";
 import { HOUR, nyAddDays, nyStartOfDay } from "@/lib/time";
 import type { Call, Callback, CallbackAction, Csr, Customer, InboundCall, Job, OutboundCall, TextMessage } from "@/lib/types";
@@ -89,14 +89,14 @@ function newIncoming(state: SimState, rng: Rng, kind: "missed" | "ai_no_booking"
   const jobType = repeat ? repeat.jobType : rng.weighted(JOB_TYPE_WEIGHTS);
   const ai = kind === "ai_no_booking";
   const reason = rng.pick(AI_NO_BOOK_REASONS);
-  const abandoned = !ai && rng.chance(0.4);
+  const abandoned = !ai && rng.chance(0.6);
   const call: InboundCall = {
     id: uid("call", now),
     direction: "inbound",
     customerId: customer.id,
     phone: customer.phones.length > 1 && rng.chance(0.3) ? customer.phones[1] : customer.phones[0],
     startedAt: now,
-    durationSec: ai ? rng.int(60, 220) : abandoned ? rng.int(10, 70) : 0,
+    durationSec: ai ? aiCallSeconds(rng, false) : abandoned ? hangUpSeconds(rng) : 0,
     jobType,
     outcome: ai ? "ai_agent" : abandoned ? "abandoned" : "missed",
     campaignId: rng.weighted(CAMPAIGNS.map((c) => [c.id, c.weight] as const)),

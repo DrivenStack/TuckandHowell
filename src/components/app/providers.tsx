@@ -92,7 +92,7 @@ function SimulationRunner() {
             { customers: s.data.customers, csrs: s.data.csrs, callbacks: s.callbacks, goLiveAt: s.data.goLiveAt, now },
             rng,
           );
-          s.applyEvent(event, { notify: true });
+          s.applyEvent(event, { notify: false });
         }
         schedule();
       }, nextDelay(rng));

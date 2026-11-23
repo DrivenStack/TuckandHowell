@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { TodayView } from "@/components/views/today";
+import { AbandonedView } from "@/components/views/abandoned";
 
-export const metadata: Metadata = { title: "Today" };
+export const metadata: Metadata = { title: "Abandoned calls" };
 
 export default function Page() {
-  return <TodayView />;
+  return <AbandonedView />;
 }

@@ -164,6 +164,29 @@ function statusAt(blocks: AvailabilityBlock[], t: number): AvailabilityStatus {
   return "Offline";
 }
 
+/** How long an abandoned caller waited before hanging up. Most give up fast; a tail waits on hold. */
+export function hangUpSeconds(rng: Rng): number {
+  return rng.weighted([
+    [rng.int(2, 10), 58],
+    [rng.int(11, 30), 20],
+    [rng.int(31, 60), 11],
+    [rng.int(61, 120), 7],
+    [rng.int(121, 300), 4],
+  ] as const);
+}
+
+/** How long a caller talked with the AI Voice Agent. Some hang up as soon as they hear a bot. */
+export function aiCallSeconds(rng: Rng, booked: boolean): number {
+  if (booked) return rng.int(120, 360);
+  return rng.weighted([
+    [rng.int(6, 29), 16],
+    [rng.int(30, 59), 20],
+    [rng.int(60, 119), 30],
+    [rng.int(120, 239), 26],
+    [rng.int(240, 480), 8],
+  ] as const);
+}
+
 /* ---------------- Jobs ---------------- */
 
 const HOURLY_WEIGHTS = [
@@ -317,7 +340,7 @@ export function generateDataset(now: number): Dataset {
       else if (!free.length) outcome = rng.chance(0.93) ? "ai_agent" : "abandoned";
       else {
         const r = rng.float();
-        outcome = r < 0.88 ? "csr_answered" : r < 0.915 ? "ai_agent" : r < 0.955 ? "missed" : "abandoned";
+        outcome = r < 0.875 ? "csr_answered" : r < 0.91 ? "ai_agent" : r < 0.94 ? "missed" : "abandoned";
       }
 
       let csrId: string | null = null;
@@ -334,8 +357,8 @@ export function generateDataset(now: number): Dataset {
         const factor = draft.jobType === "Call Back" || draft.jobType === "Warranty" ? 0.75 : 1;
         booked = rng.chance(PROFILE_BOOKING[csr.profile] * factor);
       } else if (outcome === "ai_agent") {
-        durationSec = rng.int(60, 260);
         booked = rng.chance(0.21);
+        durationSec = aiCallSeconds(rng, booked);
         const issue = rng.pick(AI_ISSUES[draft.jobType]);
         if (booked) aiSummary = `${issue} Booked a visit.`;
         else {
@@ -350,7 +373,7 @@ export function generateDataset(now: number): Dataset {
           );
         }
       } else {
-        durationSec = rng.int(8, 75);
+        durationSec = hangUpSeconds(rng);
       }
 
       const call: InboundCall = {
@@ -471,14 +494,15 @@ export function generateDataset(now: number): Dataset {
       // Outbound attempts
       let t = c.startedAt;
       // After go-live a few callbacks still slip past a day (counted as unreturned)
-      const late = live && d >= 2 && rng.chance(c.outcome === "ai_agent" ? 0.09 : 0.05);
+      const late = live && d >= 3 && rng.chance(c.outcome === "ai_agent" ? 0.09 : 0.05);
       const firstDelay = late
         ? rng.range(26, 40) * HOUR
         : live
         ? rng.weighted([
-            [rng.range(3, 20), d === 0 ? 22 : 40],
-            [rng.range(20, 60), d === 0 ? 40 : 38],
-            [rng.range(60, 160), d === 0 ? 38 : 22],
+            [rng.range(1, 5), d === 0 ? 8 : 14],
+            [rng.range(5, 15), d === 0 ? 14 : 24],
+            [rng.range(15, 60), d === 0 ? 40 : 38],
+            [rng.range(60, 220), d === 0 ? 38 : 24],
           ] as const) * MINUTE
         : rng.range(45, 540) * MINUTE;
       t += firstDelay;
@@ -506,7 +530,9 @@ export function generateDataset(now: number): Dataset {
         };
         calls.push(out);
         if (kind === "real") {
-          if (rng.chance(0.3)) {
+          // Faster callbacks book more often
+          const waited = (t - c.startedAt) / MINUTE;
+          if (rng.chance(waited <= 15 ? 0.52 : waited <= 60 ? 0.38 : waited <= 240 ? 0.24 : 0.12)) {
             jobs.push(
               makeJob(rng, `job_${out.id}`, key, c.jobType, t + out.durationSec * 1000, c.campaignId, "csr", caller.id, out.id, now),
             );

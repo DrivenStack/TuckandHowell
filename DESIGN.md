@@ -1,5 +1,7 @@
 # Call Center: design system
 
+> The app currently has one page, Abandoned calls. The wireframes for Today and Callbacks below describe screens that were removed and are kept for reference.
+
 A calm, confident instrument for an owner who trusts numbers. It should read like a private banking statement: quiet ground, strong figures, one loud thing on the screen at a time.
 
 ## Color
@@ -143,6 +145,18 @@ Mobile first at 390px. 16px side gutter, 20px at tablet, 32px desktop, content m
 │        │                          drawer slides from right ──▶│
 └────────┴──────────────────────────────────────────────────────┘
 ```
+
+## Five-step scale
+
+Speed and hang-up length tables use a five-step scale from best to worst, each with its own dark-mode step and always next to a written label:
+
+| Step | Light | Dark | Speed | Hang-up length |
+|---|---|---|---|---|
+| 1 | `#2F7D5B` | `#5DB38A` | Within 5 minutes | 10 seconds or less (target) |
+| 2 | `#6F9A2E` | `#9CC15A` | Within 15 minutes | 11 to 30 seconds |
+| 3 | `#C9A227` | `#E0C04E` | Within 1 hour | 31 to 60 seconds |
+| 4 | `#D9822B` | `#E39A50` | Within 4 hours | 1 to 2 minutes |
+| 5 | `#B9443C` | `#E2726A` | Slower than 4 hours | Over 2 minutes |
 
 ## Principles
 

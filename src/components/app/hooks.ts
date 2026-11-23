@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { rangeFromPreset, type Range, type RangePreset } from "@/lib/metrics/calculations";
 import type { Csr, Customer } from "@/lib/types";
 import { useAppStore } from "@/store/app";
@@ -39,7 +39,17 @@ export function useLocalRange(preset: RangePreset, custom: { from: number; to: n
   return useMemo(() => rangeFromPreset(preset, now || 0, custom ?? undefined), [preset, custom, now]);
 }
 
-/** The CSR acting in the demo (the selected CSR in CSR role, otherwise the default actor) */
-export function useActingCsrId(): string {
-  return useAppStore((s) => s.csrId);
+const mdQuery = "(min-width: 768px)";
+const subscribeMd = (cb: () => void) => {
+  const m = window.matchMedia(mdQuery);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+
+/**
+ * True on tablet and desktop widths (768px and up). Used to render only the visible
+ * layout, so charts never mount inside a hidden container.
+ */
+export function useIsWide(): boolean {
+  return useSyncExternalStore(subscribeMd, () => window.matchMedia(mdQuery).matches, () => true);
 }

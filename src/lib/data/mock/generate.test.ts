@@ -61,7 +61,8 @@ describe("mock data", () => {
     const rate = (xs: typeof ai) => xs.filter(neverReturned).length / xs.length;
     const live = cbs.filter((c) => c.firstMissedAt >= data.goLiveAt);
     const counts = live.reduce<Record<string, number>>((m, c) => ((m[c.list] = (m[c.list] ?? 0) + 1), m), {});
-    const waitingOld = live.filter((c) => c.list === "needs_callback" && c.firstMissedAt < todayStart).length;
+    // Nobody from before today should be waiting without a single attempt
+    const waitingOld = live.filter((c) => c.list === "needs_callback" && c.firstMissedAt < todayStart && c.attempts === 0).length;
     console.log({ before: rate(before), after: rate(after), counts, waitingOld, total: cbs.length });
     expect(rate(before)).toBeGreaterThan(0.6);
     expect(rate(after)).toBeLessThan(0.15);
