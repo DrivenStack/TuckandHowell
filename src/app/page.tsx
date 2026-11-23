@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { AbandonedView } from "@/components/views/abandoned";
+import { StatsView } from "@/components/views/stats";
 
-export const metadata: Metadata = { title: "Abandoned calls" };
+export const metadata: Metadata = { title: "Stats" };
 
 export default function Page() {
-  return <AbandonedView />;
+  return <StatsView />;
 }

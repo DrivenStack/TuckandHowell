@@ -88,7 +88,7 @@ export interface InboundCall extends CallBase {
   direction: "inbound";
   outcome: InboundOutcome;
   campaignId: string;
-  /** CSR who answered (csr_answered) or whose line rang while Available (missed) */
+  /** CSR who answered (csr_answered), or whose line rang and did not pick up (missed, abandoned, AI during open hours) */
   csrId: string | null;
   /** True when a job was booked on this call */
   booked: boolean;

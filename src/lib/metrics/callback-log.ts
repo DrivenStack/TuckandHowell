@@ -11,10 +11,8 @@ export const CALLBACK_TYPES: CallbackType[] = ["Abandoned", "Broccoli", "Missed"
 
 /** Minimum talk time for an outbound call to count as reaching the customer */
 export const REACHED_MIN_SECONDS = 20;
-/** After this many tries without reaching the customer, we stop calling */
-export const MAX_ATTEMPTS = 3;
-
-export type ActionNeeded = "Call back" | "Try again" | "No more attempts" | "None";
+/** Open until someone calls the customer back; any call back (or the customer reaching a CSR) makes it done. */
+export type ActionNeeded = "Call back" | "None";
 
 export interface CallbackRow {
   id: string;
@@ -24,16 +22,18 @@ export interface CallbackRow {
   phone: string;
   customerId: string;
   customerName: string;
-  /** Number of different CSRs who called or spoke with the customer about this call */
-  reviewedBy: number;
-  reviewerIds: string[];
+  /** The CSR whose line rang and did not pick up. Null for after-hours calls. */
+  assignedCsrId: string | null;
+  /** First call back (or the customer reaching a CSR), and who made it */
+  calledBackAt: number | null;
+  calledBackBy: string | null;
   lengthSec: number;
   attempts: number;
   reachedCsr: boolean;
   reachedAt: number | null;
   booked: boolean;
   action: ActionNeeded;
-  /** Done by the data (reached, booked, or out of attempts), before any manual change */
+  /** Done by the data (called back, reached, or booked), before any manual change */
   doneByData: boolean;
 }
 
@@ -95,12 +95,16 @@ export function callbackLog(data: Dataset, index: LogIndex, from: number, to: nu
 
     let attempts = 0;
     let reachedAt: number | null = null;
-    const reviewers = new Set<string>();
+    let calledBackAt: number | null = null;
+    let calledBackBy: string | null = null;
     for (const t of index.touches.get(c.customerId) ?? []) {
       if (t.at <= c.startedAt) continue;
       if (t.at - c.startedAt > RETURN_WINDOW_MS) break;
       if (t.outbound) attempts++;
-      if (t.csrId) reviewers.add(t.csrId);
+      if (calledBackAt === null) {
+        calledBackAt = t.at;
+        calledBackBy = t.csrId;
+      }
       if (t.reached) {
         reachedAt = t.at;
         break;
@@ -108,7 +112,8 @@ export function callbackLog(data: Dataset, index: LogIndex, from: number, to: nu
     }
     const booked = (index.bookings.get(c.customerId) ?? []).some((b) => b > c.startedAt && b - c.startedAt <= RETURN_WINDOW_MS);
     const reached = reachedAt !== null;
-    const action: ActionNeeded = reached || booked ? "None" : attempts === 0 ? "Call back" : attempts >= MAX_ATTEMPTS ? "No more attempts" : "Try again";
+    const done = calledBackAt !== null || reached || booked;
+    const action: ActionNeeded = done ? "None" : "Call back";
     rows.push({
       id: `log_${c.id}`,
       callId: c.id,
@@ -117,15 +122,16 @@ export function callbackLog(data: Dataset, index: LogIndex, from: number, to: nu
       phone: c.phone,
       customerId: c.customerId,
       customerName: index.names.get(c.customerId) ?? "Unknown caller",
-      reviewedBy: reviewers.size,
-      reviewerIds: [...reviewers],
+      assignedCsrId: c.csrId,
+      calledBackAt,
+      calledBackBy,
       lengthSec: c.durationSec,
       attempts,
       reachedCsr: reached,
       reachedAt,
       booked,
       action,
-      doneByData: action === "None" || action === "No more attempts",
+      doneByData: done,
     });
   }
   return rows.sort((a, b) => b.at - a.at);

@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Bot, Check, ListChecks, Minus, PhoneMissed, PhoneOff, Search, type LucideIcon } from "lucide-react";
-import { buildLogIndex, callbackLog, CALLBACK_TYPES, MAX_ATTEMPTS, REACHED_MIN_SECONDS, type ActionNeeded, type CallbackRow, type CallbackType } from "@/lib/metrics/callback-log";
+import { buildLogIndex, callbackLog, CALLBACK_TYPES, REACHED_MIN_SECONDS, type ActionNeeded, type CallbackRow, type CallbackType } from "@/lib/metrics/callback-log";
 import { fmtInt, type RangePreset } from "@/lib/metrics/calculations";
 import { fmt, fmtTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
+import { useDataStore } from "@/store/data";
 import { useLocalRange, useReady } from "@/components/app/hooks";
 import { DataTable, type Col } from "@/components/common/data-table";
 import { DateRangePicker, EmptyState, PageHeader, PageSkeleton, SourceNote } from "@/components/common/page";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/primitives";
 
 const TYPE_META: Record<CallbackType, { icon: LucideIcon; hint: string }> = {
   Abandoned: { icon: PhoneOff, hint: "Hung up while waiting on hold" },
@@ -21,8 +22,6 @@ const TYPE_META: Record<CallbackType, { icon: LucideIcon; hint: string }> = {
 
 const ACTION_STYLE: Record<ActionNeeded, string> = {
   "Call back": "bg-alarm-tint text-alarm",
-  "Try again": "bg-warm-tint text-warm-text",
-  "No more attempts": "bg-subtle text-muted-foreground",
   None: "text-muted-foreground",
 };
 
@@ -50,6 +49,37 @@ function Callbacks() {
   const csrNames = useMemo(() => new Map(data.csrs.map((c) => [c.id, c.name])), [data.csrs]);
   const isDone = (r: CallbackRow) => overrides[r.callId] ?? r.doneByData;
 
+  // Live: when someone calls back a person on the list, their row turns done and drops down.
+  const [recent, setRecent] = useState<Record<string, number>>({});
+  const openRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    openRef.current = new Set(all.filter((r) => !(overrides[r.callId] ?? r.doneByData)).map((r) => r.callId));
+  }, [all, overrides]);
+  useEffect(() => {
+    const timers: number[] = [];
+    const unsubscribe = useDataStore.subscribe((st, prev) => {
+      if (!st.data || st.data === prev.data || !openRef.current.size) return;
+      const fresh = callbackLog(st.data, buildLogIndex(st.data), range.from, Number.MAX_SAFE_INTEGER);
+      const names = new Map(st.data.csrs.map((c) => [c.id, c.name]));
+      const done = fresh.filter((r) => openRef.current.has(r.callId) && r.doneByData);
+      if (!done.length) return;
+      for (const r of done) {
+        toast.success(`Done: ${r.customerName} was called back${r.calledBackBy ? ` by ${names.get(r.calledBackBy)}` : ""}`);
+      }
+      const at = Date.now();
+      setRecent((cur) => ({ ...cur, ...Object.fromEntries(done.map((r) => [r.callId, at])) }));
+      timers.push(
+        window.setTimeout(() => {
+          setRecent((cur) => Object.fromEntries(Object.entries(cur).filter(([, t]) => t !== at)));
+        }, 6000),
+      );
+    });
+    return () => {
+      unsubscribe();
+      timers.forEach((t) => window.clearTimeout(t));
+    };
+  }, [range.from]);
+
   const counts = useMemo(() => {
     const byType: Record<string, number> = { all: all.length };
     for (const t of CALLBACK_TYPES) byType[t] = all.filter((r) => r.type === t).length;
@@ -67,6 +97,8 @@ function Callbacks() {
     if (q && !r.customerName.toLowerCase().includes(q) && !(qDigits.length >= 3 && r.phone.replace(/\D/g, "").includes(qDigits))) return false;
     return true;
   });
+  // Open calls on top (newest first), done calls below them
+  rows.sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || b.at - a.at);
 
   const columns: Col<CallbackRow>[] = [
     { id: "date", header: "Call date", value: (r) => r.at, cell: (r) => <span className="num whitespace-nowrap" title={fmt(r.at, "EEEE, MMMM d, yyyy")}>{fmt(r.at, "MMM d")}</span> },
@@ -88,22 +120,16 @@ function Callbacks() {
     { id: "phone", header: "Caller phone", value: (r) => r.phone, cell: (r) => <span className="num whitespace-nowrap">{r.phone}</span> },
     { id: "name", header: "Customer name", mobile: "title", value: (r) => r.customerName, cell: (r) => <span className="font-medium whitespace-nowrap">{r.customerName}</span> },
     {
-      id: "reviewed",
-      header: "Reviewed by",
-      align: "right",
-      value: (r) => r.reviewedBy,
+      id: "assigned",
+      header: "Assigned to",
+      value: (r) => (r.assignedCsrId ? csrNames.get(r.assignedCsrId) ?? "" : ""),
       cell: (r) =>
-        r.reviewedBy ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="num cursor-default underline decoration-line-strong decoration-dotted underline-offset-4">
-                {r.reviewedBy}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{r.reviewerIds.map((id) => csrNames.get(id) ?? "CSR").join(", ")}</TooltipContent>
-          </Tooltip>
+        r.assignedCsrId ? (
+          <span className="whitespace-nowrap">{csrNames.get(r.assignedCsrId) ?? "CSR"}</span>
         ) : (
-          <span className="num text-muted-foreground">0</span>
+          <span className="whitespace-nowrap text-muted-foreground" title="Came in when no CSR was on shift">
+            After hours
+          </span>
         ),
     },
     { id: "length", header: "Length (sec)", align: "right", value: (r) => r.lengthSec, cell: (r) => fmtInt(r.lengthSec) },
@@ -168,7 +194,7 @@ function Callbacks() {
     <div>
       <PageHeader
         title="Callbacks"
-        description="Every call that needed a call back, from every source, newest first. Tick Done when it is handled."
+        description="Every call that needed a call back, from every source. Open calls stay on top; once someone calls back, the row turns done and moves down."
         actions={
           <DateRangePicker
             value={preset}
@@ -187,7 +213,7 @@ function Callbacks() {
           { label: "Calls needing a call back", value: all.length, sub: range.label },
           { label: "Needs action", value: open, sub: open ? "Not done yet" : "All handled", tone: open ? "text-alarm" : undefined },
           { label: "Reached a CSR", value: reached, sub: `Spoke for ${REACHED_MIN_SECONDS} sec or more` },
-          { label: "Done", value: all.length - open, sub: `Reached, booked, or ${MAX_ATTEMPTS} tries` },
+          { label: "Done", value: all.length - open, sub: "Called back, reached, or booked" },
         ].map((c, i) => (
           <div key={c.label} className={cn("p-5 sm:p-6", i % 2 === 0 && "border-r border-line", i < 2 && "border-b border-line sm:border-b-0", i === 1 && "sm:border-r")}>
             <p className="text-small text-muted-foreground">{c.label}</p>
@@ -253,10 +279,10 @@ function Callbacks() {
         rows={rows}
         columns={columns}
         rowKey={(r) => r.id}
-        initialSort={{ id: "date", desc: true }}
+        animateRows
         pageSize={25}
         csvName={`callbacks-${range.preset}`}
-        rowClassName={(r) => (!isDone(r) && r.action === "Call back" ? "bg-alarm-tint/40" : undefined)}
+        rowClassName={(r) => (recent[r.callId] ? "bg-success-tint" : !isDone(r) ? "bg-alarm-tint/40" : undefined)}
         empty={
           <EmptyState icon={ListChecks} title="No calls match" className="rounded-[var(--radius-panel)] border border-dashed border-line-strong">
             Try another type, status or date range, or clear the search.
@@ -265,8 +291,9 @@ function Callbacks() {
       />
 
       <p className="mt-4 text-caption text-muted-foreground">
-        Reviewed by is how many CSRs called or spoke with the customer about this call. Attempt counts our call backs within 3 days. Reached CSR means a call of {REACHED_MIN_SECONDS} seconds
-        or more, or the customer called again and a CSR answered.
+        Assigned to is the CSR whose line rang and did not pick up; calls that came in when nobody was on shift show After hours. A call back to any of the
+        customer&apos;s numbers marks the row done and moves it below the open ones. Attempt counts our call backs within 3 days. Reached CSR means a call of{" "}
+        {REACHED_MIN_SECONDS} seconds or more, or the customer called again and a CSR answered.
       </p>
       <SourceNote source="ServiceTitan and the Broccoli AI Voice Agent" className="mt-2" />
     </div>

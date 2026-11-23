@@ -367,13 +367,20 @@ export function generateDataset(now: number): Dataset {
           hotLead = reason.hot;
         }
       } else if (outcome === "missed") {
-        if (free.length && rng.chance(0.45)) {
+        // The call rang this CSR while they were Available and nobody picked up
+        if (free.length) {
           csrId = rng.weighted(
             free.map((c) => [c.id, c.profile === "struggling" ? 3 : c.profile === "new" ? 2 : 1] as const),
           );
         }
       } else {
         durationSec = hangUpSeconds(rng);
+      }
+
+      if (!csrId && (outcome === "abandoned" || outcome === "ai_agent")) {
+        // Routed to a CSR on shift first (busy or on break) before the caller gave up or the AI took it
+        const onShift = csrs.filter((c) => statusAt(dayBlocks.get(c.id) ?? [], draft.at) !== "Offline");
+        if (onShift.length) csrId = rng.pick(onShift).id;
       }
 
       const call: InboundCall = {

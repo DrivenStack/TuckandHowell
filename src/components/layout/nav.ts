@@ -1,4 +1,4 @@
-import { Bot, ListChecks, type LucideIcon, PhoneOff } from "lucide-react";
+import { ListChecks, type LucideIcon, PieChart } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -7,8 +7,7 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  { href: "/", label: "Abandoned", icon: PhoneOff },
-  { href: "/broccoli", label: "Broccoli calls", icon: Bot },
+  { href: "/", label: "Stats", icon: PieChart },
   { href: "/callbacks", label: "Callbacks", icon: ListChecks },
 ];
 

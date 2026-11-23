@@ -109,7 +109,7 @@ function Header({ pathname }: { pathname: string }) {
       </div>
       {/* Tabs on phones and tablets: a full-width switch under the header */}
       <nav aria-label="Main" className="px-4 pb-3 sm:px-6 lg:hidden">
-        <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-subtle p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-[12px] bg-subtle p-1">
           {NAV.map((item) => {
             const active = isActive(pathname, item.href);
             return (

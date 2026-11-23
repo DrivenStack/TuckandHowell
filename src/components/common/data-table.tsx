@@ -12,6 +12,7 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export function DataTable<T extends RowData>({
   rowClassName,
   caption,
   pageSize,
+  animateRows,
 }: {
   rows: T[];
   columns: Col<T>[];
@@ -61,7 +63,11 @@ export function DataTable<T extends RowData>({
   caption: string;
   /** Show this many rows per page, with page controls under the table */
   pageSize?: number;
+  /** Rows glide to their new position when the order changes (live data) */
+  animateRows?: boolean;
 }) {
+  const reduce = useReducedMotion();
+  const motionProps = animateRows && !reduce ? { layout: "position" as const, transition: { type: "spring" as const, stiffness: 380, damping: 34 } } : {};
   const [sorting, setSorting] = useState<SortingState>(initialSort ? [{ id: initialSort.id, desc: !!initialSort.desc }] : []);
   const defs = useMemo(
     () =>
@@ -159,11 +165,12 @@ export function DataTable<T extends RowData>({
               </thead>
               <tbody>
                 {pageRows.map((r) => (
-                  <tr
+                  <motion.tr
+                    {...motionProps}
                     key={rowKey(r)}
                     onClick={onRowClick ? () => onRowClick(r) : undefined}
                     className={cn(
-                      "border-b border-line last:border-0",
+                      "border-b border-line transition-colors duration-700 last:border-0",
                       onRowClick && "cursor-pointer hover:bg-subtle/60",
                       rowClassName?.(r),
                     )}
@@ -188,7 +195,7 @@ export function DataTable<T extends RowData>({
                         )}
                       </td>
                     ))}
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
@@ -211,7 +218,7 @@ export function DataTable<T extends RowData>({
                 </>
               );
               return (
-                <li key={rowKey(r)} className={rowClassName?.(r)}>
+                <motion.li {...motionProps} key={rowKey(r)} className={cn("transition-colors duration-700", rowClassName?.(r))}>
                   {onRowClick ? (
                     <button type="button" onClick={() => onRowClick(r)} className="block w-full py-4 text-left">
                       {content}
@@ -219,7 +226,7 @@ export function DataTable<T extends RowData>({
                   ) : (
                     <div className="py-4">{content}</div>
                   )}
-                </li>
+                </motion.li>
               );
             })}
           </ul>

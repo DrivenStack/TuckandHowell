@@ -100,7 +100,8 @@ function newIncoming(state: SimState, rng: Rng, kind: "missed" | "ai_no_booking"
     jobType,
     outcome: ai ? "ai_agent" : abandoned ? "abandoned" : "missed",
     campaignId: rng.weighted(CAMPAIGNS.map((c) => [c.id, c.weight] as const)),
-    csrId: !ai && !abandoned && rng.chance(0.4) ? rng.pick(state.csrs).id : null,
+    // The CSR whose line rang and did not pick up
+    csrId: rng.pick(state.csrs).id,
     booked: false,
     jobId: null,
     aiSummary: ai ? `${rng.pick(AI_ISSUES[jobType])} ${reason.text}` : null,
