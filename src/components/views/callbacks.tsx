@@ -1,86 +1,132 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Bot, Check, FileText, ListChecks, Minus, PhoneMissed, PhoneOff, Search, Sparkles, type LucideIcon } from "lucide-react";
-import { buildLogIndex, callbackLog, CALLBACK_TYPES, REACHED_MIN_SECONDS, type ActionNeeded, type CallbackRow, type CallbackType } from "@/lib/metrics/callback-log";
-import { fmtInt, type RangePreset } from "@/lib/metrics/calculations";
-import { fmt, fmtTime } from "@/lib/time";
+import { AlertTriangle, Check, ListChecks, Minus, PhoneMissed, PhoneOff, RefreshCw, Search, Voicemail, type LucideIcon } from "lucide-react";
+import { CALLBACK_TYPES, REACHED_MIN_SECONDS, RETURN_WINDOW_MS, type CallbackRow, type CallbackType } from "@/lib/callbacks/live";
+import { fmtInt, fmtMinutes } from "@/lib/format";
+import type { RangePreset } from "@/lib/range";
+import { fmt, fmtTime, MINUTE } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
-import { useDataStore } from "@/store/data";
-import { useLocalRange, useReady } from "@/components/app/hooks";
+import { useLiveCallbacks, useLocalRange } from "@/components/app/hooks";
 import { DataTable, type Col } from "@/components/common/data-table";
 import { DateRangePicker, EmptyState, PageHeader, PageSkeleton, SourceNote } from "@/components/common/page";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/primitives";
 
 const TYPE_META: Record<CallbackType, { icon: LucideIcon; hint: string }> = {
-  Abandoned: { icon: PhoneOff, hint: "Hung up while waiting on hold" },
-  Broccoli: { icon: Bot, hint: "AI Voice Agent took the call, no booking" },
-  Missed: { icon: PhoneMissed, hint: "Rang a CSR, nobody picked up" },
-  "Web form": { icon: FileText, hint: "Web form request from ServiceTitan" },
-  "Lace flag": { icon: Sparkles, hint: "Answered call that did not book, flagged by Lace AI" },
-};
-
-const ACTION_STYLE: Record<ActionNeeded, string> = {
-  "Call back": "bg-alarm-tint text-alarm",
-  None: "text-muted-foreground",
+  Abandoned: { icon: PhoneOff, hint: "The caller hung up before anyone answered (ServiceTitan call type: Abandoned)" },
+  Missed: { icon: PhoneMissed, hint: "Inbound call with no agent on it in ServiceTitan" },
 };
 
 type Status = "all" | "open" | "done";
 
 export function CallbacksView() {
-  const ready = useReady();
-  if (!ready) return <PageSkeleton kpis={4} charts={1} />;
-  return <Callbacks />;
-}
-
-function Callbacks() {
-  const { data } = useReady()!;
   const [preset, setPreset] = useState<RangePreset>("7d");
   const [custom, setCustom] = useState<{ from: number; to: number } | null>(null);
   const range = useLocalRange(preset, custom);
+  const live = useLiveCallbacks(range.from ? range : null);
+
+  return (
+    <div>
+      <PageHeader
+        title="Callbacks"
+        description="Every missed and abandoned call, live from ServiceTitan. Open calls stay on top; once someone calls back, the row turns done and moves down."
+        actions={
+          <DateRangePicker
+            value={preset}
+            custom={custom}
+            onChange={(p, c) => {
+              setPreset(p);
+              setCustom(c ?? null);
+            }}
+          />
+        }
+      />
+      {live.status === "loading" ? (
+        <LiveLoading />
+      ) : live.status === "error" ? (
+        <ConnectionError message={live.error} />
+      ) : (
+        <Callbacks rows={live.rows} rangeLabel={range.label} preset={preset} justDone={live.justDone} justAdded={live.justAdded} error={live.error} />
+      )}
+    </div>
+  );
+}
+
+export function LiveLoading() {
+  return (
+    <div>
+      <p className="mb-4 flex items-center gap-2 text-small text-muted-foreground" role="status">
+        <RefreshCw className="size-4 animate-spin" aria-hidden />
+        Loading calls from ServiceTitan…
+      </p>
+      <PageSkeleton kpis={4} charts={1} />
+    </div>
+  );
+}
+
+export function ConnectionError({ message }: { message: string | null }) {
+  return (
+    <div role="alert" className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-[var(--radius-panel)] border border-alarm/30 bg-alarm-tint px-6 py-12 text-center">
+      <AlertTriangle className="size-6 text-alarm" aria-hidden />
+      <h2 className="text-section font-semibold">Could not reach ServiceTitan</h2>
+      <p className="text-small text-muted-foreground">{message ?? "Something went wrong."} The page keeps trying every 15 seconds.</p>
+      <Button variant="outline" onClick={() => window.location.reload()}>
+        Try again now
+      </Button>
+    </div>
+  );
+}
+
+export function StaleNotice({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p role="status" className="mb-4 flex items-center gap-2 rounded-[10px] bg-warm-tint px-3 py-2 text-small text-warm-text">
+      <AlertTriangle className="size-4 shrink-0" aria-hidden />
+      The last check with ServiceTitan failed ({error}). Showing the last good data; retrying every 15 seconds.
+    </p>
+  );
+}
+
+function Callbacks({
+  rows: all,
+  rangeLabel,
+  preset,
+  justDone,
+  justAdded,
+  error,
+}: {
+  rows: CallbackRow[];
+  rangeLabel: string;
+  preset: RangePreset;
+  justDone: string[];
+  justAdded: string[];
+  error: string | null;
+}) {
   const overrides = useAppStore((s) => s.doneOverrides);
   const setDone = useAppStore((s) => s.setDone);
   const [type, setType] = useState<CallbackType | "all">("all");
   const [status, setStatus] = useState<Status>("all");
   const [query, setQuery] = useState("");
+  const isDone = (r: CallbackRow) => overrides[String(r.callId)] ?? r.doneByData;
 
-  const index = useMemo(() => buildLogIndex(data), [data]);
-  const all = useMemo(() => callbackLog(data, index, range.from, range.to), [data, index, range.from, range.to]);
-  const csrNames = useMemo(() => new Map(data.csrs.map((c) => [c.id, c.name])), [data.csrs]);
-  const isDone = (r: CallbackRow) => overrides[r.callId] ?? r.doneByData;
-
-  // Live: when someone calls back a person on the list, their row turns done and drops down.
-  const [recent, setRecent] = useState<Record<string, number>>({});
-  const openRef = useRef<Set<string>>(new Set());
+  // Live notifications: someone called a customer back, or a new missed or abandoned call came in
   useEffect(() => {
-    openRef.current = new Set(all.filter((r) => !(overrides[r.callId] ?? r.doneByData)).map((r) => r.callId));
-  }, [all, overrides]);
-  useEffect(() => {
-    const timers: number[] = [];
-    const unsubscribe = useDataStore.subscribe((st, prev) => {
-      if (!st.data || st.data === prev.data || !openRef.current.size) return;
-      const fresh = callbackLog(st.data, buildLogIndex(st.data), range.from, Number.MAX_SAFE_INTEGER);
-      const names = new Map(st.data.csrs.map((c) => [c.id, c.name]));
-      const done = fresh.filter((r) => openRef.current.has(r.callId) && r.doneByData);
-      if (!done.length) return;
-      for (const r of done) {
-        toast.success(`Done: ${r.customerName} was called back${r.calledBackBy ? ` by ${names.get(r.calledBackBy)}` : ""}`);
-      }
-      const at = Date.now();
-      setRecent((cur) => ({ ...cur, ...Object.fromEntries(done.map((r) => [r.callId, at])) }));
-      timers.push(
-        window.setTimeout(() => {
-          setRecent((cur) => Object.fromEntries(Object.entries(cur).filter(([, t]) => t !== at)));
-        }, 6000),
-      );
-    });
-    return () => {
-      unsubscribe();
-      timers.forEach((t) => window.clearTimeout(t));
-    };
-  }, [range.from]);
+    const byId = new Map(all.map((r) => [r.id, r]));
+    for (const id of justDone.slice(0, 3)) {
+      const r = byId.get(id);
+      if (r) toast.success(`Done: ${r.customerName} was called back${r.calledBackBy ? ` by ${r.calledBackBy}` : ""}`);
+    }
+    for (const id of justAdded.slice(0, 3)) {
+      const r = byId.get(id);
+      if (r) toast(`New ${r.type.toLowerCase()} call: ${r.customerName}, ${r.phone}`);
+    }
+    // Only when a new check reports changes, not on every re-render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justDone, justAdded]);
 
   const counts = useMemo(() => {
     const byType: Record<string, number> = { all: all.length };
@@ -89,6 +135,8 @@ function Callbacks() {
   }, [all]);
   const open = all.filter((r) => !isDone(r)).length;
   const reached = all.filter((r) => r.reachedCsr).length;
+  const done = new Set(justDone);
+  const added = new Set(justAdded);
 
   const q = query.trim().toLowerCase();
   const qDigits = q.replace(/\D/g, "");
@@ -112,7 +160,7 @@ function Callbacks() {
       cell: (r) => {
         const m = TYPE_META[r.type];
         return (
-          <span title={r.note ? `${m.hint}: ${r.note}` : m.hint} className="inline-flex h-6 items-center gap-1 rounded-full bg-subtle px-2 text-caption font-medium whitespace-nowrap">
+          <span title={m.hint} className="inline-flex h-6 items-center gap-1 rounded-full bg-subtle px-2 text-caption font-medium whitespace-nowrap">
             <m.icon className="size-3.5 text-muted-foreground" aria-hidden />
             {r.type}
           </span>
@@ -120,21 +168,41 @@ function Callbacks() {
       },
     },
     { id: "phone", header: "Caller phone", value: (r) => r.phone, cell: (r) => <span className="num whitespace-nowrap">{r.phone}</span> },
-    { id: "name", header: "Customer name", mobile: "title", value: (r) => r.customerName, cell: (r) => <span className="font-medium whitespace-nowrap">{r.customerName}</span> },
+    {
+      id: "name",
+      header: "Customer name",
+      mobile: "title",
+      value: (r) => r.customerName,
+      cell: (r) => <span className={cn("font-medium whitespace-nowrap", r.customerName === "Unknown caller" && "font-normal text-muted-foreground")}>{r.customerName}</span>,
+    },
     {
       id: "assigned",
       header: "Assigned to",
-      value: (r) => (r.assignedCsrId ? csrNames.get(r.assignedCsrId) ?? "" : ""),
-      cell: (r) =>
-        r.assignedCsrId ? (
-          <span className="whitespace-nowrap">{csrNames.get(r.assignedCsrId) ?? "CSR"}</span>
-        ) : (
-          <span className="whitespace-nowrap text-muted-foreground" title={r.type === "Web form" ? "Web forms are not tied to a CSR" : "Came in when no CSR was on shift"}>
-            {r.type === "Web form" ? "Unassigned" : "After hours"}
-          </span>
-        ),
+      sortable: false,
+      value: () => "",
+      cell: () => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="cursor-help whitespace-nowrap text-muted-foreground underline decoration-line-strong decoration-dotted underline-offset-4">
+              Not recorded
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>ServiceTitan does not record whose line rang when nobody picked up. Connecting Dialpad will fill this in.</TooltipContent>
+        </Tooltip>
+      ),
     },
-    { id: "length", header: "Length (sec)", align: "right", value: (r) => r.lengthSec, cell: (r) => (r.lengthSec === null ? <span className="text-muted-foreground">–</span> : fmtInt(r.lengthSec)) },
+    {
+      id: "length",
+      header: "Length (sec)",
+      align: "right",
+      value: (r) => r.lengthSec,
+      cell: (r) => (
+        <span className="inline-flex items-center gap-1">
+          {r.voicemail ? <Voicemail className="size-3.5 text-muted-foreground" aria-label="Left a voicemail" /> : null}
+          {fmtInt(r.lengthSec)}
+        </span>
+      ),
+    },
     { id: "attempts", header: "Attempt", align: "right", value: (r) => r.attempts, cell: (r) => fmtInt(r.attempts) },
     {
       id: "reached",
@@ -156,33 +224,36 @@ function Callbacks() {
     {
       id: "action",
       header: "Action needed",
-      value: (r) => ["Call back", "Try again", "No more attempts", "None"].indexOf(r.action),
+      value: (r) => (isDone(r) ? 1 : 0),
       cell: (r) =>
-        r.action === "None" ? (
-          <span className="whitespace-nowrap text-muted-foreground">{!r.reachedCsr && r.booked ? "Booked" : "None"}</span>
+        isDone(r) ? (
+          r.calledBackAt ? (
+            <span className="whitespace-nowrap text-muted-foreground" title={`Called back ${fmtMinutes((r.calledBackAt - r.at) / MINUTE)} after the call`}>
+              None, {r.calledBackBy ? `called by ${r.calledBackBy.split(" ")[0]}` : "called back"}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">None</span>
+          )
         ) : (
-          <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-caption font-medium whitespace-nowrap", ACTION_STYLE[r.action])}>{r.action}</span>
+          <span className="inline-flex h-6 items-center rounded-full bg-alarm-tint px-2.5 text-caption font-medium whitespace-nowrap text-alarm">Call back</span>
         ),
     },
     {
       id: "done",
       header: "Done?",
-      value: (r) => (isDone(r) ? 1 : 0),
       sortable: false,
-      cell: (r) => {
-        const done = isDone(r);
-        return (
-          <label className="-m-2 inline-flex cursor-pointer items-center p-2" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              checked={done}
-              onChange={(e) => setDone(r.callId, e.target.checked)}
-              className="size-5 cursor-pointer rounded accent-[var(--success)]"
-              aria-label={`Done: ${r.customerName}, ${r.type} call at ${fmtTime(r.at)}`}
-            />
-          </label>
-        );
-      },
+      value: (r) => (isDone(r) ? 1 : 0),
+      cell: (r) => (
+        <label className="-m-2 inline-flex cursor-pointer items-center p-2" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isDone(r)}
+            onChange={(e) => setDone(String(r.callId), e.target.checked)}
+            className="size-5 cursor-pointer rounded accent-[var(--success)]"
+            aria-label={`Done: ${r.customerName}, ${r.type} call at ${fmtTime(r.at)}`}
+          />
+        </label>
+      ),
     },
   ];
 
@@ -193,29 +264,15 @@ function Callbacks() {
   ];
 
   return (
-    <div>
-      <PageHeader
-        title="Callbacks"
-        description="Every call that needed a call back, from every source. Open calls stay on top; once someone calls back, the row turns done and moves down."
-        actions={
-          <DateRangePicker
-            value={preset}
-            custom={custom}
-            onChange={(p, c) => {
-              setPreset(p);
-              setCustom(c ?? null);
-            }}
-          />
-        }
-      />
+    <>
+      <StaleNotice error={error} />
 
-      {/* Summary */}
       <section aria-label="Summary" className="mb-8 grid grid-cols-2 overflow-hidden rounded-[var(--radius-hero)] border border-line bg-panel sm:grid-cols-4">
         {[
-          { label: "Calls needing a call back", value: all.length, sub: range.label },
-          { label: "Needs action", value: open, sub: open ? "Not done yet" : "All handled", tone: open ? "text-alarm" : undefined },
-          { label: "Reached a CSR", value: reached, sub: `Spoke for ${REACHED_MIN_SECONDS} sec or more` },
-          { label: "Done", value: all.length - open, sub: "Called back, reached, or booked" },
+          { label: "Missed and abandoned", value: all.length, sub: rangeLabel, tone: undefined },
+          { label: "Needs action", value: open, sub: open ? "Nobody has called back yet" : "All handled", tone: open ? "text-alarm" : undefined },
+          { label: "Reached a CSR", value: reached, sub: `Spoke ${REACHED_MIN_SECONDS} sec or more, or called in`, tone: undefined },
+          { label: "Done", value: all.length - open, sub: "Called back, or ticked by hand", tone: undefined },
         ].map((c, i) => (
           <div key={c.label} className={cn("p-5 sm:p-6", i % 2 === 0 && "border-r border-line", i < 2 && "border-b border-line sm:border-b-0", i === 1 && "sm:border-r")}>
             <p className="text-small text-muted-foreground">{c.label}</p>
@@ -238,10 +295,7 @@ function Callbacks() {
                 role="radio"
                 aria-checked={active}
                 onClick={() => setType(t)}
-                className={cn(
-                  "flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-small transition-colors",
-                  active ? "border-ink bg-ink text-on-ink" : "border-line-strong hover:bg-subtle",
-                )}
+                className={cn("flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-small transition-colors", active ? "border-ink bg-ink text-on-ink" : "border-line-strong hover:bg-subtle")}
               >
                 <Icon className="size-4" aria-hidden />
                 {t === "all" ? "All types" : t}
@@ -259,10 +313,7 @@ function Callbacks() {
                 role="radio"
                 aria-checked={status === s.id}
                 onClick={() => setStatus(s.id)}
-                className={cn(
-                  "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 text-small whitespace-nowrap",
-                  status === s.id ? "bg-ink text-on-ink" : "text-muted-foreground hover:text-ink",
-                )}
+                className={cn("flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 text-small whitespace-nowrap", status === s.id ? "bg-ink text-on-ink" : "text-muted-foreground hover:text-ink")}
               >
                 {s.label}
                 <span className="num opacity-70">{s.count}</span>
@@ -277,28 +328,27 @@ function Callbacks() {
       </div>
 
       <DataTable
-        caption="Calls that needed a call back"
+        caption="Missed and abandoned calls"
         rows={rows}
         columns={columns}
         rowKey={(r) => r.id}
         animateRows
         pageSize={25}
-        csvName={`callbacks-${range.preset}`}
-        rowClassName={(r) => (recent[r.callId] ? "bg-success-tint" : !isDone(r) ? "bg-alarm-tint/40" : undefined)}
+        csvName={`callbacks-${preset}`}
+        rowClassName={(r) => (done.has(r.id) ? "bg-success-tint" : added.has(r.id) ? "bg-cool-tint" : !isDone(r) ? "bg-alarm-tint/40" : undefined)}
         empty={
-          <EmptyState icon={ListChecks} title="No calls match" className="rounded-[var(--radius-panel)] border border-dashed border-line-strong">
-            Try another type, status or date range, or clear the search.
+          <EmptyState icon={ListChecks} title={all.length ? "No calls match" : "No missed or abandoned calls in this period"} className="rounded-[var(--radius-panel)] border border-dashed border-line-strong">
+            {all.length ? "Try another type, status or date range, or clear the search." : "New ones will appear here within 15 seconds of reaching ServiceTitan."}
           </EmptyState>
         }
       />
 
       <p className="mt-4 text-caption text-muted-foreground">
-        Assigned to is the CSR whose line rang and did not pick up (for Lace flags, the CSR who took the call); calls that came in when nobody was on shift show After
-        hours, and web forms show Unassigned. Hover a type to see why it needs a call back. A call back to any of the
-        customer&apos;s numbers marks the row done and moves it below the open ones. Attempt counts our call backs within 3 days. Reached CSR means a call of{" "}
-        {REACHED_MIN_SECONDS} seconds or more, or the customer called again and a CSR answered.
+        Abandoned is ServiceTitan&apos;s call type for callers who hung up before anyone answered. Missed is any other inbound call with no agent on it. A call back is any
+        outbound call to the caller&apos;s number within {Math.round(RETURN_WINDOW_MS / 86_400_000)} days, or the caller calling again and a CSR answering; it marks the row done.
+        Attempt counts our outbound calls. Reached CSR means a call of {REACHED_MIN_SECONDS} seconds or more, or the caller reaching a CSR.
       </p>
-      <SourceNote source="ServiceTitan and the Broccoli AI Voice Agent" className="mt-2" />
-    </div>
+      <SourceNote source="ServiceTitan, live" className="mt-2" />
+    </>
   );
 }

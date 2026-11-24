@@ -169,3 +169,18 @@ export function fmtAgo(ts: number, now: number): string {
 export function fmtStampInline(ts: number, now: number): string {
   return fmtStamp(ts, now).replace(/^(Today|Yesterday)/, (m) => m.toLowerCase());
 }
+
+/** CSRs staff the phones 7 am to 7 pm New York time. */
+export const OPEN_HOUR = 7;
+export const CLOSE_HOUR = 19;
+
+/**
+ * When a callback clock starts: the call itself during open hours,
+ * otherwise 7 am the next time the call center opens.
+ */
+export function clockStart(ts: number): number {
+  const p = nyParts(ts);
+  if (p.hour >= OPEN_HOUR && p.hour < CLOSE_HOUR) return ts;
+  const day = p.hour >= CLOSE_HOUR ? nyAddDays(ts, 1) : nyStartOfDay(ts);
+  return day + OPEN_HOUR * HOUR;
+}

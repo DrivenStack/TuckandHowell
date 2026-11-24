@@ -2,7 +2,7 @@
 
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { delta, fmtInt, fmtMinutes, fmtPct, fmtUsd, fmtHoursMinutes } from "@/lib/metrics/calculations";
+import { delta, fmtInt, fmtMinutes, fmtPct, fmtUsd, fmtHoursMinutes } from "@/lib/format";
 import { metric, type MetricFormat, type MetricId } from "@/lib/metrics/definitions";
 import { InfoTip } from "./page";
 

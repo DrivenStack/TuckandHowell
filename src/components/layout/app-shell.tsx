@@ -7,7 +7,7 @@ import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtAgo, fmtTime } from "@/lib/time";
 import { useAppStore, type ThemeChoice } from "@/store/app";
-import { useDataStore } from "@/store/data";
+import { useLiveStore } from "@/store/live";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/overlays";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/primitives";
@@ -15,7 +15,6 @@ import { isActive, NAV } from "./nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const status = useDataStore((s) => s.status);
 
   return (
     <div className="min-h-dvh overflow-x-clip lg:pl-[15.5rem]">
@@ -28,19 +27,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar pathname={pathname} />
       <Header pathname={pathname} />
       <main id="main" className="mx-auto w-full min-w-0 max-w-[1240px] px-4 pt-5 pb-16 sm:px-6 lg:px-8 lg:pt-8">
-        {status === "error" ? <LoadError /> : children}
+        {children}
       </main>
-    </div>
-  );
-}
-
-function LoadError() {
-  const error = useDataStore((s) => s.error);
-  return (
-    <div role="alert" className="mx-auto flex max-w-md flex-col items-center gap-3 py-24 text-center">
-      <h1 className="text-section font-semibold">We could not load the call center data</h1>
-      <p className="text-small text-muted-foreground">{error ?? "Something went wrong."} Reload the page to try again.</p>
-      <Button onClick={() => window.location.reload()}>Reload the page</Button>
     </div>
   );
 }
@@ -57,7 +45,7 @@ function Wordmark({ className }: { className?: string }) {
 /* ---------------- Sidebar (desktop) ---------------- */
 
 function Sidebar({ pathname }: { pathname: string }) {
-  const simulationOn = useAppStore((s) => s.simulationOn);
+  const status = useLiveStore((s) => s.status);
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[15.5rem] flex-col bg-rail text-rail-text lg:flex">
       <div className="px-6 pt-7 pb-8 text-rail-active">
@@ -87,10 +75,10 @@ function Sidebar({ pathname }: { pathname: string }) {
       </nav>
       <div className="space-y-1 px-6 pt-4 pb-6 text-caption">
         <p className="flex items-center gap-2">
-          <span className={cn("size-1.5 rounded-full", simulationOn ? "bg-[#7cc4a0]" : "bg-rail-text/50")} aria-hidden />
-          {simulationOn ? "Live demo running" : "Live demo paused"}
+          <span className={cn("size-1.5 rounded-full", status === "live" ? "bg-[#7cc4a0]" : status === "error" ? "bg-[#e2726a]" : "bg-rail-text/50")} aria-hidden />
+          {status === "live" ? "Live from ServiceTitan" : status === "error" ? "ServiceTitan not reachable" : "Connecting to ServiceTitan"}
         </p>
-        <p className="opacity-70">Dummy data for now</p>
+        <p className="opacity-70">Checks for new calls every 15 seconds</p>
       </div>
     </aside>
   );
@@ -134,41 +122,35 @@ function Header({ pathname }: { pathname: string }) {
 }
 
 function Freshness() {
-  const last = useDataStore((s) => s.lastUpdatedAt);
-  const now = useDataStore((s) => s.now);
-  const statuses = useDataStore((s) => s.sourceStatuses);
+  const last = useLiveStore((s) => s.syncedAt);
+  const status = useLiveStore((s) => s.status);
+  const error = useLiveStore((s) => s.error);
   const [clock, setClock] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => setClock(Date.now()), 15_000);
     return () => window.clearInterval(id);
   }, []);
   if (!last) return <span className="mr-2 h-4 w-24 animate-pulse rounded bg-subtle" aria-hidden />;
-  const ref = Math.max(now, clock);
+  const ref = Math.max(last, clock);
   const ago = fmtAgo(last, ref);
-  const fresh = ref - last < 5 * 60_000;
+  const fresh = status === "live" && ref - last < 2 * 60_000;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           className="mr-1 flex h-11 shrink-0 items-center gap-2 rounded-[10px] px-2 text-caption text-muted-foreground hover:bg-subtle sm:text-small"
-          aria-label={`Data updated ${ago}. Source: ServiceTitan.`}
+          aria-label={`ServiceTitan data updated ${ago}.${status === "error" ? " Connection problem." : ""}`}
         >
-          <span className={cn("size-2 rounded-full", fresh ? "bg-success" : "bg-warm")} aria-hidden />
+          <span className={cn("size-2 rounded-full", status === "error" ? "bg-alarm" : fresh ? "bg-success" : "bg-warm")} aria-hidden />
           <span className="hidden sm:inline">Updated {ago}</span>
           <span className="num whitespace-nowrap sm:hidden">{ago.replace(" ago", "")}</span>
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end" className="w-64">
-        <p className="mb-2 font-medium">Last update {fmtTime(last)}</p>
-        <ul className="space-y-1">
-          {statuses.map((s) => (
-            <li key={s.system} className="flex justify-between gap-3">
-              <span>{s.system}</span>
-              <span className="opacity-70">{s.state === "On hold" ? "On hold" : s.lastSyncedAt ? fmtAgo(s.lastSyncedAt, ref) : "Not synced"}</span>
-            </li>
-          ))}
-        </ul>
+        <p className="font-medium">Live from ServiceTitan</p>
+        <p className="mt-1 opacity-80">Last sync {fmtTime(last)}. New calls and call backs are checked every 15 seconds.</p>
+        {status === "error" && error ? <p className="mt-2 opacity-80">Last attempt failed: {error}</p> : null}
       </TooltipContent>
     </Tooltip>
   );

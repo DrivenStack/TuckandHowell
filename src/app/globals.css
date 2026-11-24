@@ -45,6 +45,9 @@
   --platform-dialpad: #e87ba4;
   --platform-servicetitan: #6b5ac9;
   --platform-lace: #1baf7a;
+  /* Call back types (validated pair: blue, magenta) */
+  --type-missed: #2a78d6;
+  --type-abandoned: #e87ba4;
   --chart-axis: #6b7a83;
 
   --shadow-float: 0 12px 32px -12px rgb(19 35 46 / 0.22), 0 2px 6px -2px rgb(19 35 46 / 0.08);
@@ -84,6 +87,8 @@
   --platform-dialpad: #d55181;
   --platform-servicetitan: #8f6fd8;
   --platform-lace: #199e70;
+  --type-missed: #3987e5;
+  --type-abandoned: #d55181;
   --chart-axis: #8797a1;
 
   --shadow-float: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);

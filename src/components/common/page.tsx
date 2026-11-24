@@ -4,10 +4,9 @@ import { useState, type ReactNode } from "react";
 import { CalendarDays, ChevronDown, Database, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmt, nyStartOfDay, nyAddDays, TZ } from "@/lib/time";
-import { RANGE_LABELS, type RangePreset } from "@/lib/metrics/calculations";
+import { RANGE_LABELS, type RangePreset } from "@/lib/range";
 import { metric, type MetricId } from "@/lib/metrics/definitions";
-import { useAppStore } from "@/store/app";
-import { useDataStore } from "@/store/data";
+import { useNow } from "@/components/app/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label, Popover, PopoverContent, PopoverTrigger, Skeleton, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/primitives";
@@ -189,21 +188,18 @@ export function DateRangePicker({
   onChange,
   presets = PRESETS,
 }: {
-  value?: RangePreset;
-  custom?: { from: number; to: number } | null;
-  onChange?: (preset: RangePreset, custom?: { from: number; to: number }) => void;
+  value: RangePreset;
+  custom: { from: number; to: number } | null;
+  onChange: (preset: RangePreset, custom?: { from: number; to: number }) => void;
   presets?: RangePreset[];
 }) {
-  const globalPreset = useAppStore((s) => s.rangePreset);
-  const globalCustom = useAppStore((s) => s.customRange);
-  const setRange = useAppStore((s) => s.setRange);
-  const now = useDataStore((s) => s.now);
-  const preset = value ?? globalPreset;
-  const customRange = custom !== undefined ? custom : globalCustom;
-  const change = onChange ?? setRange;
+  const now = useNow();
+  const preset = value;
+  const customRange = custom;
+  const change = onChange;
   const [open, setOpen] = useState(false);
   const today = nyStartOfDay(now || 0);
-  const minDay = nyAddDays(today, -89);
+  const minDay = nyAddDays(today, -60);
   const [from, setFrom] = useState(() => toInput(customRange?.from ?? nyAddDays(today, -13)));
   const [to, setTo] = useState(() => toInput(customRange?.to ?? today));
 
@@ -251,7 +247,7 @@ export function DateRangePicker({
             setOpen(false);
           }}
         >
-          <p className="mb-2 text-caption text-muted-foreground">Custom range, up to 90 days back</p>
+          <p className="mb-2 text-caption text-muted-foreground">Custom range, up to 60 days back</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label htmlFor="range-from" className="text-caption">
