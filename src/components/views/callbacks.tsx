@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, ListChecks, Minus, PhoneMissed, PhoneOff, RefreshCw, Search, Voicemail, type LucideIcon } from "lucide-react";
 import { CALLBACK_TYPES, REACHED_MIN_SECONDS, RETURN_WINDOW_MS, type CallbackRow, type CallbackType } from "@/lib/callbacks/live";
-import { fmtInt, fmtMinutes } from "@/lib/format";
+import { fmtElapsed, fmtInt } from "@/lib/format";
 import type { RangePreset } from "@/lib/range";
-import { fmt, fmtTime, MINUTE } from "@/lib/time";
+import { fmt, fmtTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
-import { useLiveCallbacks, useLocalRange } from "@/components/app/hooks";
+import { useLiveCallbacks, useLocalRange, useNow } from "@/components/app/hooks";
 import { DataTable, type Col } from "@/components/common/data-table";
 import { DateRangePicker, EmptyState, PageHeader, PageSkeleton, SourceNote } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,15 @@ function Callbacks({
   const [status, setStatus] = useState<Status>("all");
   const [query, setQuery] = useState("");
   const isDone = (r: CallbackRow) => overrides[String(r.callId)] ?? r.doneByData;
+
+  // A one-second clock so "Waiting 45 sec" counts up live
+  const baseNow = useNow();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const now = Math.max(baseNow, tick);
 
   // Live notifications: someone called a customer back, or a new missed or abandoned call came in
   useEffect(() => {
@@ -224,18 +233,25 @@ function Callbacks({
     {
       id: "action",
       header: "Action needed",
-      value: (r) => (isDone(r) ? 1 : 0),
+      // Open calls first, longest wait first; then done calls, slowest call back first
+      value: (r) => (isDone(r) ? 1e13 + (r.calledBackAt ? r.calledBackAt - r.at : 0) : -(now - r.at)),
       cell: (r) =>
         isDone(r) ? (
-          r.calledBackAt ? (
-            <span className="whitespace-nowrap text-muted-foreground" title={`Called back ${fmtMinutes((r.calledBackAt - r.at) / MINUTE)} after the call`}>
-              None, {r.calledBackBy ? `called by ${r.calledBackBy.split(" ")[0]}` : "called back"}
+          <span className="flex flex-col leading-tight">
+            <span className="whitespace-nowrap text-muted-foreground">
+              None{r.calledBackAt && r.calledBackBy ? `, called by ${r.calledBackBy.split(" ")[0]}` : ""}
             </span>
-          ) : (
-            <span className="text-muted-foreground">None</span>
-          )
+            <span className="num mt-0.5 text-caption whitespace-nowrap text-muted-foreground">
+              {r.calledBackAt ? `Called back after ${fmtElapsed(r.calledBackAt - r.at)}` : "Ticked done by hand"}
+            </span>
+          </span>
         ) : (
-          <span className="inline-flex h-6 items-center rounded-full bg-alarm-tint px-2.5 text-caption font-medium whitespace-nowrap text-alarm">Call back</span>
+          <span className="flex flex-col items-start leading-tight">
+            <span className="inline-flex h-6 items-center rounded-full bg-alarm-tint px-2.5 text-caption font-medium whitespace-nowrap text-alarm">Call back</span>
+            <span className="num mt-1 text-caption font-medium whitespace-nowrap text-alarm" aria-live="off">
+              Waiting {fmtElapsed(now - r.at)}
+            </span>
+          </span>
         ),
     },
     {

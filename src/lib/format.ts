@@ -35,3 +35,16 @@ export const fmtHoursMinutes = (mins: number) => {
   const m = Math.round(mins % 60);
   return h ? `${h}h ${m}m` : `${m}m`;
 };
+
+/** Elapsed time in plain words: "45 sec", "12 min", "2 hr 5 min", "3 days 4 hr" */
+export function fmtElapsed(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return `${sec} sec`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return min % 60 ? `${hr} hr ${min % 60} min` : `${hr} hr`;
+  const days = Math.floor(hr / 24);
+  const restHr = hr % 24;
+  return `${days} ${days === 1 ? "day" : "days"}${restHr ? ` ${restHr} hr` : ""}`;
+}

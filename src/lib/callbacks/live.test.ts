@@ -84,3 +84,14 @@ describe("call backs from ServiceTitan calls", () => {
     expect(formatPhone("+18645550101")).toBe("(864) 555-0101");
   });
 });
+
+describe("elapsed time wording", () => {
+  it("uses seconds, minutes, hours and days", async () => {
+    const { fmtElapsed } = await import("@/lib/format");
+    expect(fmtElapsed(45_000)).toBe("45 sec");
+    expect(fmtElapsed(12 * 60_000 + 30_000)).toBe("12 min");
+    expect(fmtElapsed(2 * 3_600_000 + 5 * 60_000)).toBe("2 hr 5 min");
+    expect(fmtElapsed(3 * 3_600_000)).toBe("3 hr");
+    expect(fmtElapsed(26 * 3_600_000)).toBe("1 day 2 hr");
+  });
+});
