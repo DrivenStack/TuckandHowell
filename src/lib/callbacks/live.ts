@@ -2,10 +2,12 @@
  * Call backs from real ServiceTitan calls. Pure functions, safe on server and client.
  *
  * A call back is owed for every inbound call nobody answered:
- *  - Abandoned: ServiceTitan call type "Abandoned" (the caller hung up before anyone answered)
+ *  - Abandoned: ServiceTitan call type "Abandoned" (the caller hung up before anyone answered).
+ *    Calls typed Abandoned that have an agent on them are left out, matching the team's report.
  *  - Missed: any other inbound call with no agent on it
- * It is done once someone calls that number back (any outbound call), or the customer
- * calls again and a CSR answers.
+ * Calls ServiceTitan types "Not a lead" are left out completely.
+ * It is done once someone calls that number back (any outbound call within 3 days), or the
+ * customer calls us again and a CSR answers (any time later: the customer got through).
  */
 import { clockStart, DAY, HOUR, MINUTE, nyAddDays, nyParts, nyStartOfDay } from "@/lib/time";
 
@@ -28,7 +30,8 @@ export interface LiveCall {
 export type CallbackType = "Abandoned" | "Missed";
 export const CALLBACK_TYPES: CallbackType[] = ["Abandoned", "Missed"];
 
-/** A call back only counts within this window after the missed call */
+/** Our outbound call back only counts within this window after the missed call.
+ *  The customer calling again and a CSR answering counts at any time. */
 export const RETURN_WINDOW_MS = 3 * DAY;
 /** An outbound call this long or longer counts as reaching the customer */
 export const REACHED_MIN_SECONDS = 20;
@@ -46,9 +49,14 @@ export interface CallbackRow {
   voicemail: boolean;
   attempts: number;
   reachedCsr: boolean;
+  /** When it was sorted: our first call back, or the customer's answered call to us */
   calledBackAt: number | null;
+  /** The CSR on that call */
   calledBackBy: string | null;
-  /** Wait from the missed call to the first call back, counted from 7 am for overnight calls */
+  /** Who closed it: we called them ("us"), or they called us and a CSR answered ("customer") */
+  doneBy: "us" | "customer" | null;
+  /** Wait from the missed call to OUR first call back, counted from 7 am for overnight calls.
+   *  Null when we never called (still open, or the customer called us instead). */
   returnMs: number | null;
   booked: boolean;
   action: ActionNeeded;
@@ -63,9 +71,22 @@ export function formatPhone(p: string): string {
   return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : p || "Unknown number";
 }
 
+/** "Small, Lexa" -> "Lexa", "Kielah Bersano" -> "Kielah" */
+export function firstName(name: string): string {
+  const n = name.trim();
+  if (n.includes(",")) return n.split(",")[1].trim().split(/\s+/)[0] || n;
+  return n.split(/\s+/)[0];
+}
+
+/** ServiceTitan's call type for calls that are not leads (spam, vendors, wrong numbers...) */
+export const NOT_A_LEAD = "NotLead";
+
 export function typeOf(c: LiveCall): CallbackType | null {
   if (c.direction !== "inbound") return null;
-  if (c.callType === "Abandoned") return "Abandoned";
+  // ServiceTitan already decided these are not leads (and hides them), so no call back is owed
+  if (c.callType === NOT_A_LEAD) return null;
+  // Typed Abandoned but a CSR is on it: the team's report does not count these
+  if (c.callType === "Abandoned") return c.agentName ? null : "Abandoned";
   if (!c.agentName) return "Missed";
   return null;
 }
@@ -106,13 +127,16 @@ export function buildCallbackRows(calls: LiveCall[], from: number, to: number): 
     let booked = false;
     let calledBackAt: number | null = null;
     let calledBackBy: string | null = null;
+    let doneBy: CallbackRow["doneBy"] = null;
     for (const t of touches.get(phoneKey(c.from)) ?? []) {
       if (t.at <= c.at) continue;
-      if (t.at - c.at > RETURN_WINDOW_MS) break;
+      // Our calls only count within the window; the customer reaching us counts any time
+      if (t.outbound && t.at - c.at > RETURN_WINDOW_MS) continue;
       if (t.outbound) attempts++;
       if (calledBackAt === null) {
         calledBackAt = t.at;
         calledBackBy = t.by;
+        doneBy = t.outbound ? "us" : "customer";
       }
       if (t.booked) booked = true;
       if (t.reached) {
@@ -134,7 +158,8 @@ export function buildCallbackRows(calls: LiveCall[], from: number, to: number): 
       reachedCsr: reached,
       calledBackAt,
       calledBackBy,
-      returnMs: calledBackAt === null ? null : Math.max(0, calledBackAt - clockStart(c.at)),
+      doneBy,
+      returnMs: doneBy === "us" && calledBackAt !== null ? Math.max(0, calledBackAt - clockStart(c.at)) : null,
       booked,
       action: done ? "None" : "Call back",
       doneByData: done,

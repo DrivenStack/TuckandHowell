@@ -32,7 +32,8 @@ const defs: Omit<MetricDefinition, "id">[] = [
   {
     name: "Missed and abandoned calls",
     explanation: "Inbound calls nobody answered: callers who hung up before anyone picked up (Abandoned) and other unanswered calls (Missed).",
-    formula: "Inbound calls marked Abandoned, plus inbound calls with no agent",
+    formula:
+      "Inbound calls marked Abandoned with no agent on them, plus other inbound calls with no agent (calls typed Not a lead are left out)",
     source: "ServiceTitan",
     format: "count",
     higherIsBetter: false,
@@ -40,7 +41,8 @@ const defs: Omit<MetricDefinition, "id">[] = [
   },
   {
     name: "Got called back",
-    explanation: "Missed and abandoned calls where someone called the number back, or the caller called again and a CSR answered, within 3 days.",
+    explanation:
+      "Missed and abandoned calls that are sorted: someone called the number back within 3 days, or the caller called us again (any time later) and a CSR answered.",
     formula: "Calls followed by an outbound call to the caller's number, or an answered inbound call from it",
     source: "ServiceTitan",
     format: "count",
@@ -67,7 +69,8 @@ const defs: Omit<MetricDefinition, "id">[] = [
   },
   {
     name: "Typical callback speed",
-    explanation: "How long a customer usually waits for our first call back, counted from when we open (7 am to 7 pm). Half wait less than this.",
+    explanation:
+      "How long a customer usually waits for our first call back, counted from when we open (7 am to 7 pm). Half wait less than this. Calls the customer sorted by calling us again are left out.",
     formula: "Median of (first call back − request time during open hours)",
     source: "ServiceTitan",
     format: "minutes",

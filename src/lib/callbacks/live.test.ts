@@ -30,6 +30,14 @@ describe("call backs from ServiceTitan calls", () => {
     expect(r.every((x) => x.action === "Call back" && !x.doneByData)).toBe(true);
   });
 
+  it("leaves out calls typed Abandoned that have an agent on them", () => {
+    expect(rows([call({ callType: "Abandoned", agentName: "Small, Lexa", durationSec: 23 })])).toHaveLength(0);
+  });
+
+  it("leaves out calls ServiceTitan types Not a lead", () => {
+    expect(rows([call({ callType: "NotLead", voicemail: true }), call({ from: "Restricted", callType: "NotLead" })])).toHaveLength(0);
+  });
+
   it("ignores outbound calls as call backs owed", () => {
     expect(rows([call({ direction: "outbound", to: "8645550101", agentName: "Tasha Greene" })])).toHaveLength(0);
   });
@@ -51,14 +59,43 @@ describe("call backs from ServiceTitan calls", () => {
     expect(r.reachedCsr).toBe(true);
   });
 
-  it("the customer calling again and a CSR answering marks it done", () => {
+  it("the customer calling again and a CSR answering marks it done, with no call back from us", () => {
     const [r] = rows([call({}), call({ at: T0 + 30 * MIN, agentName: "Keisha Morrow", callType: "Booked" })]);
     expect(r.doneByData).toBe(true);
+    expect(r.doneBy).toBe("customer");
     expect(r.reachedCsr).toBe(true);
     expect(r.booked).toBe(true);
+    expect(r.attempts).toBe(0);
+    // Not counted as our callback speed
+    expect(r.returnMs).toBeNull();
   });
 
-  it("calls before the missed call, or more than 3 days later, do not count", () => {
+  it("the customer getting through days later still closes it (abandoned Nov 19, called us Nov 24)", () => {
+    const [r] = rows([
+      call({ callType: "Abandoned" }),
+      call({ at: T0 + (4 * 24 + 18) * 60 * MIN, agentName: "Small, Lexa", callType: "Excused" }),
+    ]);
+    expect(r.doneByData).toBe(true);
+    expect(r.doneBy).toBe("customer");
+    expect(r.calledBackBy).toBe("Small, Lexa");
+  });
+
+  it("another unanswered call from the customer does not close it", () => {
+    const r = rows([call({ callType: "Abandoned" }), call({ at: T0 + 2 * MIN, callType: "Abandoned" })]);
+    expect(r.every((x) => !x.doneByData)).toBe(true);
+  });
+
+  it("our call back is credited to us when it comes first", () => {
+    const [r] = rows([
+      call({}),
+      call({ direction: "outbound", at: T0 + 5 * MIN, to: "8645550101", durationSec: 60, agentName: "Marcus Lee" }),
+      call({ at: T0 + 60 * MIN, agentName: "Keisha Morrow" }),
+    ]);
+    expect(r.doneBy).toBe("us");
+    expect(r.returnMs).toBe(5 * MIN);
+  });
+
+  it("calls before the missed call, or our calls more than 3 days later, do not count", () => {
     const [r] = rows([
       call({ direction: "outbound", at: T0 - 10 * MIN, to: "8645550101", agentName: "Ben Alvarez" }),
       call({}),
@@ -93,5 +130,12 @@ describe("elapsed time wording", () => {
     expect(fmtElapsed(2 * 3_600_000 + 5 * 60_000)).toBe("2 hr 5 min");
     expect(fmtElapsed(3 * 3_600_000)).toBe("3 hr");
     expect(fmtElapsed(26 * 3_600_000)).toBe("1 day 2 hr");
+  });
+
+  it("first names from ServiceTitan's 'Last, First' format", async () => {
+    const { firstName } = await import("./live");
+    expect(firstName("Small, Lexa")).toBe("Lexa");
+    expect(firstName("Kielah Bersano")).toBe("Kielah");
+    expect(firstName("Hicks, Jesse - OFFICE")).toBe("Jesse");
   });
 });

@@ -9,7 +9,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Minus, MousePointerClick } from "lucide-react";
 import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import { binCounts, CALLBACK_TYPES, SPEED_BUCKETS, summarize, timeBins, type CallbackRow, type CallbackSummary, type CallbackType } from "@/lib/callbacks/live";
-import { fmtInt, fmtMinutes, fmtPct, median } from "@/lib/format";
+import { fmtElapsed, fmtInt, fmtMinutes, fmtPct, median } from "@/lib/format";
 import { metric, type MetricId } from "@/lib/metrics/definitions";
 import type { RangePreset } from "@/lib/range";
 import { fmt, fmtTime, MINUTE } from "@/lib/time";
@@ -28,8 +28,8 @@ const TYPE_COLOR: Record<CallbackType, string> = {
 };
 
 const TYPE_INFO: Record<CallbackType, string> = {
-  Abandoned: "Callers who hung up before anyone answered. ServiceTitan marks these with the call type Abandoned.",
-  Missed: "Inbound calls that no agent answered and that were not marked Abandoned.",
+  Abandoned: "Callers who hung up before anyone answered. ServiceTitan marks these with the call type Abandoned (calls with an agent on them are left out).",
+  Missed: "Inbound calls that no agent answered and that were not marked Abandoned or Not a lead.",
 };
 
 const LEVEL = ["", "var(--level-1)", "var(--level-2)", "var(--level-3)", "var(--level-4)", "var(--level-5)"];
@@ -296,7 +296,9 @@ function Details({ type, rows, total, bins }: { type: CallbackType; rows: Callba
 
   const speed = [
     ...SPEED_BUCKETS.map((b) => ({ label: b.label, color: LEVEL[b.level], count: returned.filter((r) => b.test(r.returnMs!)).length })),
-    { label: "Still open", color: "var(--ink)", count: rows.filter((r) => r.returnMs === null).length },
+    // Sorted without a call back from us: the customer called again and a CSR answered
+    { label: "Customer called us", color: "var(--line-strong)", count: rows.filter((r) => r.doneBy === "customer").length },
+    { label: "Still open", color: "var(--ink)", count: rows.filter((r) => !r.doneByData).length },
   ];
 
   const stats = [
@@ -314,13 +316,32 @@ function Details({ type, rows, total, bins }: { type: CallbackType; rows: Callba
     { id: "name", header: "Customer name", mobile: "title", value: (r) => r.customerName, cell: (r) => <span className="font-medium whitespace-nowrap">{r.customerName}</span> },
     { id: "phone", header: "Caller phone", value: (r) => r.phone, cell: (r) => <span className="num whitespace-nowrap">{r.phone}</span> },
     { id: "length", header: "Length (sec)", align: "right", value: (r) => r.lengthSec, cell: (r) => fmtInt(r.lengthSec) },
-    { id: "by", header: "Called back by", value: (r) => r.calledBackBy ?? "", cell: (r) => (r.calledBackBy ? <span className="whitespace-nowrap">{r.calledBackBy}</span> : <span className="text-muted-foreground">–</span>) },
+    {
+      id: "by",
+      header: "Called back by",
+      value: (r) => (r.doneBy === "us" ? (r.calledBackBy ?? "") : ""),
+      cell: (r) =>
+        r.doneBy === "us" && r.calledBackBy ? (
+          <span className="whitespace-nowrap">{r.calledBackBy}</span>
+        ) : r.doneBy === "customer" ? (
+          <span className="whitespace-nowrap text-muted-foreground">No call back from us</span>
+        ) : (
+          <span className="text-muted-foreground">–</span>
+        ),
+    },
     {
       id: "speed",
       header: "Called back after",
       align: "right",
-      value: (r) => r.returnMs,
-      cell: (r) => (r.returnMs === null ? <span className="font-medium text-alarm">Still open</span> : fmtMinutes(r.returnMs / MINUTE)),
+      value: (r) => r.returnMs ?? (r.doneBy === "customer" ? 1e12 : null),
+      cell: (r) =>
+        r.returnMs !== null ? (
+          fmtMinutes(r.returnMs / MINUTE)
+        ) : r.doneBy === "customer" && r.calledBackAt ? (
+          <span className="whitespace-nowrap text-muted-foreground">Customer called us ({fmtElapsed(r.calledBackAt - r.at)})</span>
+        ) : (
+          <span className="font-medium text-alarm">Still open</span>
+        ),
     },
     {
       id: "reached",
@@ -379,7 +400,7 @@ function Details({ type, rows, total, bins }: { type: CallbackType; rows: Callba
         <div className="mt-3 flex h-3 w-full gap-0.5 overflow-hidden rounded-full" role="img" aria-label={speed.map((x) => `${x.label} ${x.count}`).join(", ")}>
           {speed.map((x) => (x.count ? <span key={x.label} className="h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${(x.count / n) * 100}%`, background: x.color }} /> : null))}
         </div>
-        <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
+        <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-7">
           {speed.map((x) => (
             <li key={x.label} className="flex items-start gap-2 text-caption">
               <span className="mt-0.5 size-2.5 shrink-0 rounded-[3px]" style={{ background: x.color }} aria-hidden />

@@ -51,9 +51,11 @@ All in `src/lib/callbacks/live.ts`, tested in `live.test.ts`:
 
 | Rule | Detail |
 |---|---|
-| Abandoned | Inbound call with ServiceTitan call type **Abandoned** (the caller hung up before anyone answered) |
+| Abandoned | Inbound call with ServiceTitan call type **Abandoned** (the caller hung up before anyone answered). Calls typed Abandoned that have an agent on them are left out, matching the team's report. |
 | Missed | Any other inbound call with **no agent** on it |
-| Call back | Any outbound call to the caller's number within 3 days, or the caller calling again and a CSR answering. It marks the row **done** and moves it down. |
+| Not a lead | Calls ServiceTitan types **Not a lead** (spam, vendors, hidden voicemails) are left out completely |
+| Call back | Any outbound call to the caller's number within 3 days. It marks the row **done** and moves it down. |
+| Customer called us | No call back from us, but the caller called again later (any time) and a CSR answered. The row is **done**, marked "no call back from us", and left out of our callback speed. |
 | Attempt | Our outbound calls to that number, up to the one that reached them |
 | Reached CSR? | A call back of 20 seconds or more, or the caller reaching a CSR |
 | Callback speed | From the missed call to the first call back. Overnight calls are timed from 7 am. |

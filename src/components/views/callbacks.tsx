@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, ListChecks, Minus, PhoneMissed, PhoneOff, RefreshCw, Search, Voicemail, type LucideIcon } from "lucide-react";
-import { CALLBACK_TYPES, REACHED_MIN_SECONDS, RETURN_WINDOW_MS, type CallbackRow, type CallbackType } from "@/lib/callbacks/live";
+import { CALLBACK_TYPES, firstName, REACHED_MIN_SECONDS, RETURN_WINDOW_MS, type CallbackRow, type CallbackType } from "@/lib/callbacks/live";
 import { fmtElapsed, fmtInt } from "@/lib/format";
 import type { RangePreset } from "@/lib/range";
 import { fmt, fmtTime } from "@/lib/time";
@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/primiti
 
 const TYPE_META: Record<CallbackType, { icon: LucideIcon; hint: string }> = {
   Abandoned: { icon: PhoneOff, hint: "The caller hung up before anyone answered (ServiceTitan call type: Abandoned)" },
-  Missed: { icon: PhoneMissed, hint: "Inbound call with no agent on it in ServiceTitan" },
+  Missed: { icon: PhoneMissed, hint: "Inbound call with no agent on it in ServiceTitan (calls typed Not a lead are left out)" },
 };
 
 type Status = "all" | "open" | "done";
@@ -127,7 +127,9 @@ function Callbacks({
     const byId = new Map(all.map((r) => [r.id, r]));
     for (const id of justDone.slice(0, 3)) {
       const r = byId.get(id);
-      if (r) toast.success(`Done: ${r.customerName} was called back${r.calledBackBy ? ` by ${r.calledBackBy}` : ""}`);
+      if (!r) continue;
+      if (r.doneBy === "customer") toast.success(`Done: ${r.customerName} called us back${r.calledBackBy ? `, ${firstName(r.calledBackBy)} answered` : ""}`);
+      else toast.success(`Done: ${r.customerName} was called back${r.calledBackBy ? ` by ${firstName(r.calledBackBy)}` : ""}`);
     }
     for (const id of justAdded.slice(0, 3)) {
       const r = byId.get(id);
@@ -237,14 +239,26 @@ function Callbacks({
       value: (r) => (isDone(r) ? 1e13 + (r.calledBackAt ? r.calledBackAt - r.at : 0) : -(now - r.at)),
       cell: (r) =>
         isDone(r) ? (
-          <span className="flex flex-col leading-tight">
-            <span className="whitespace-nowrap text-muted-foreground">
-              None{r.calledBackAt && r.calledBackBy ? `, called by ${r.calledBackBy.split(" ")[0]}` : ""}
+          r.calledBackAt && r.doneBy === "customer" ? (
+            <span
+              className="flex flex-col leading-tight"
+              title={`Nobody called this customer back. They called us again ${fmtElapsed(r.calledBackAt - r.at)} later${r.calledBackBy ? ` and ${firstName(r.calledBackBy)} answered` : " and a CSR answered"}, so it is sorted.`}
+            >
+              <span className="whitespace-nowrap text-muted-foreground">None, customer called us</span>
+              <span className="num mt-0.5 text-caption whitespace-nowrap text-muted-foreground">
+                No call from us · after {fmtElapsed(r.calledBackAt - r.at)}
+              </span>
             </span>
-            <span className="num mt-0.5 text-caption whitespace-nowrap text-muted-foreground">
-              {r.calledBackAt ? `Called back after ${fmtElapsed(r.calledBackAt - r.at)}` : "Ticked done by hand"}
+          ) : (
+            <span className="flex flex-col leading-tight">
+              <span className="whitespace-nowrap text-muted-foreground">
+                None{r.calledBackAt && r.calledBackBy ? `, called by ${firstName(r.calledBackBy)}` : ""}
+              </span>
+              <span className="num mt-0.5 text-caption whitespace-nowrap text-muted-foreground">
+                {r.calledBackAt ? `Called back after ${fmtElapsed(r.calledBackAt - r.at)}` : "Ticked done by hand"}
+              </span>
             </span>
-          </span>
+          )
         ) : (
           <span className="flex flex-col items-start leading-tight">
             <span className="inline-flex h-6 items-center rounded-full bg-alarm-tint px-2.5 text-caption font-medium whitespace-nowrap text-alarm">Call back</span>
@@ -288,7 +302,7 @@ function Callbacks({
           { label: "Missed and abandoned", value: all.length, sub: rangeLabel, tone: undefined },
           { label: "Needs action", value: open, sub: open ? "Nobody has called back yet" : "All handled", tone: open ? "text-alarm" : undefined },
           { label: "Reached a CSR", value: reached, sub: `Spoke ${REACHED_MIN_SECONDS} sec or more, or called in`, tone: undefined },
-          { label: "Done", value: all.length - open, sub: "Called back, or ticked by hand", tone: undefined },
+          { label: "Done", value: all.length - open, sub: "Called back, customer called us, or ticked by hand", tone: undefined },
         ].map((c, i) => (
           <div key={c.label} className={cn("p-5 sm:p-6", i % 2 === 0 && "border-r border-line", i < 2 && "border-b border-line sm:border-b-0", i === 1 && "sm:border-r")}>
             <p className="text-small text-muted-foreground">{c.label}</p>
@@ -360,8 +374,9 @@ function Callbacks({
       />
 
       <p className="mt-4 text-caption text-muted-foreground">
-        Abandoned is ServiceTitan&apos;s call type for callers who hung up before anyone answered. Missed is any other inbound call with no agent on it. A call back is any
-        outbound call to the caller&apos;s number within {Math.round(RETURN_WINDOW_MS / 86_400_000)} days, or the caller calling again and a CSR answering; it marks the row done.
+        Abandoned is ServiceTitan&apos;s call type for callers who hung up before anyone answered. Missed is any other inbound call with no agent on it. Calls ServiceTitan types &quot;Not a lead&quot;, and calls typed Abandoned that have an agent on them, are not shown. A call back is any
+        outbound call to the caller&apos;s number within {Math.round(RETURN_WINDOW_MS / 86_400_000)} days; it marks the row done. If nobody calls back but the caller calls us
+        again later and a CSR answers, the row is done too, marked &quot;no call back from us&quot;.
         Attempt counts our outbound calls. Reached CSR means a call of {REACHED_MIN_SECONDS} seconds or more, or the caller reaching a CSR.
       </p>
       <SourceNote source="ServiceTitan, live" className="mt-2" />
